@@ -1,4 +1,4 @@
-import {Account} from "./Account"
+import {Account} from "./Account";
 
 // we may use this enum internally
 /* 
@@ -28,8 +28,8 @@ export type AuthenticationParameters = {
     correlationId?: string;
 } & (
     {account?: Account} | {sid?: string} | {login_hint?: string}
-);
-*/
+); */
+
 
 export type AuthenticationParameters = {
     scopes: Array<string>;  
