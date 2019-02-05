@@ -25,14 +25,21 @@ import { IUri } from "./IUri";
 import { Account } from "./Account";
 import { Constants } from "./Constants";
 
-/*
+/** 
  * @hidden
  */
 export class Utils {
+
+  /**
+   * Utils function to compare two Account objects - used to check if the same user is logged in
+   * 
+   * @param u1: Account object 
+   * @param u2: Account object
+   */
   static compareObjects(u1: Account, u2: Account): boolean {
-   if (!u1 || !u2) {
-          return false;
-      }
+    if (!u1 || !u2) {
+      return false;
+    }
     if (u1.homeAccountIdentifier && u2.homeAccountIdentifier) {
       if (u1.homeAccountIdentifier === u2.homeAccountIdentifier) {
         return true;
@@ -41,22 +48,40 @@ export class Utils {
     return false;
   }
 
+  /**
+   * expiresin in time
+   * 
+   * @param expires 
+   */
   static expiresIn(expires: string): number {
     // if AAD did not send "expires_in" property, use default expiration of 3599 seconds, for some reason AAD sends 3599 as "expires_in" value instead of 3600
-     if (!expires) {
-         expires = "3599";
-      }
+    if (!expires) {
+      expires = "3599";
+    }
     return this.now() + parseInt(expires, 10);
   }
 
+  /**
+   * return the current time
+   */
   static now(): number {
     return Math.round(new Date().getTime() / 1000.0);
   }
 
+  /**
+   * Check if a string is empty
+   * 
+   * @param str 
+   */
   static isEmpty(str: string): boolean {
     return (typeof str === "undefined" || !str || 0 === str.length);
   }
 
+  /**
+   * Extract IdToken by decoding the RAWIdToken
+   * 
+   * @param encodedIdToken 
+   */
   static extractIdToken(encodedIdToken: string): any {
     // id token will be decoded to get the username
     const decodedToken = this.decodeJwt(encodedIdToken);
@@ -79,6 +104,12 @@ export class Utils {
     return null;
   }
 
+
+  /**
+   * encoding - platform specific check
+   * 
+   * @param input 
+   */
   static base64EncodeStringUrlSafe(input: string): string {
     // html5 should support atob function for decoding
     if (window.btoa) {
@@ -89,17 +120,27 @@ export class Utils {
     }
   }
 
+  /**
+   * decoding - platform specific check
+   * 
+   * @param base64IdToken 
+   */
   static base64DecodeStringUrlSafe(base64IdToken: string): string {
     // html5 should support atob function for decoding
     base64IdToken = base64IdToken.replace(/-/g, "+").replace(/_/g, "/");
     if (window.atob) {
-        return decodeURIComponent(encodeURIComponent(window.atob(base64IdToken))); // jshint ignore:line
+      return decodeURIComponent(encodeURIComponent(window.atob(base64IdToken))); // jshint ignore:line
     }
     else {
-        return decodeURIComponent(encodeURIComponent(this.decode(base64IdToken)));
+      return decodeURIComponent(encodeURIComponent(this.decode(base64IdToken)));
     }
   }
 
+  /**
+   * encode a string
+   * 
+   * @param input 
+   */
   static encode(input: string): string {
     const keyStr: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
     let output = "";
@@ -130,6 +171,11 @@ export class Utils {
     return output.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
+  /**
+   * utf8 encode a string
+   * 
+   * @param input 
+   */
   static utf8Encode(input: string): string {
     input = input.replace(/\r\n/g, "\n");
     var utftext = "";
@@ -154,6 +200,11 @@ export class Utils {
     return utftext;
   }
 
+  /**
+   * decode a string
+   * 
+   * @param base64IdToken 
+   */
   static decode(base64IdToken: string): string {
     var codes = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
     base64IdToken = String(base64IdToken).replace(/=+$/, "");
@@ -194,6 +245,11 @@ export class Utils {
     return decoded;
   }
 
+  /**
+   * decode a JWT
+   * 
+   * @param jwtToken 
+   */
   static decodeJwt(jwtToken: string): any {
     if (this.isEmpty(jwtToken)) {
       return null;
@@ -212,6 +268,12 @@ export class Utils {
     return crackedToken;
   }
 
+
+  /**
+   * deserialize a string
+   * 
+   * @param query 
+   */
   static deserialize(query: string): any {
     let match: Array<string>; // Regex for replacing addition symbol with a space
     const pl = /\+/g;
@@ -226,29 +288,58 @@ export class Utils {
     return obj;
   }
 
+  /**
+   * Check if there are dup scopes in a given request
+   * 
+   * @param cachedScopes 
+   * @param scopes 
+   */
   static isIntersectingScopes(cachedScopes: Array<string>, scopes: Array<string>): boolean {
     cachedScopes = this.convertToLowerCase(cachedScopes);
     for (let i = 0; i < scopes.length; i++) {
-        if (cachedScopes.indexOf(scopes[i].toLowerCase()) > -1) {
-            return true;
-        }
+      if (cachedScopes.indexOf(scopes[i].toLowerCase()) > -1) {
+        return true;
+      }
     }
     return false;
   }
 
+
+  /**
+   * Check if a given scope is present in the request
+   * 
+   * @param cachedScopes 
+   * @param scopes 
+   */
   static containsScope(cachedScopes: Array<string>, scopes: Array<string>): boolean {
     cachedScopes = this.convertToLowerCase(cachedScopes);
     return scopes.every((value: any): boolean => cachedScopes.indexOf(value.toString().toLowerCase()) >= 0);
   }
 
+  /**
+   * toLower
+   * 
+   * @param scopes 
+   */
   static convertToLowerCase(scopes: Array<string>): Array<string> {
     return scopes.map(scope => scope.toLowerCase());
   }
 
+  /**
+   * remove one element from a scope array
+   * 
+   * @param scopes 
+   * @param scope 
+   */
   static removeElement(scopes: Array<string>, scope: string): Array<string> {
     return scopes.filter(value => value !== scope);
   }
 
+  /**
+   * Decimal to Hex
+   * 
+   * @param num 
+   */
   static decimalToHex(num: number): string {
     var hex: string = num.toString(16);
     while (hex.length < 2) {
@@ -257,28 +348,36 @@ export class Utils {
     return hex;
   }
 
+  /**
+   * MSAL JS Library Version
+   */
   static getLibraryVersion(): string {
     return "0.2.4";
   }
 
-  /*
+  /** 
     * Given a url like https://a:b/common/d?e=f#g, and a tenantId, returns https://a:b/tenantId/d
+    * 
     * @param href The url
     * @param tenantId The tenant id to replace
     */
-    static replaceFirstPath(url: string, tenantId: string): string {
-        if (!tenantId) {
-            return url;
-        }
-        var urlObject = this.GetUrlComponents(url);
-        var pathArray = urlObject.PathSegments;
-        if (pathArray.length !== 0 && (pathArray[0] === Constants.common || pathArray[0] === Constants.organizations)) {
-            pathArray[0] = tenantId;
-            url = urlObject.Protocol + "//" + urlObject.HostNameAndPort + "/" + pathArray.join("/");
-        }
-        return url;
+  static replaceFirstPath(url: string, tenantId: string): string {
+    if (!tenantId) {
+      return url;
     }
+    var urlObject = this.GetUrlComponents(url);
+    var pathArray = urlObject.PathSegments;
+    if (pathArray.length !== 0 && (pathArray[0] === Constants.common || pathArray[0] === Constants.organizations)) {
+      pathArray[0] = tenantId;
+      url = urlObject.Protocol + "//" + urlObject.HostNameAndPort + "/" + pathArray.join("/");
+    }
+    return url;
+  }
 
+  /**
+   * Creates a new GUID - used to populate state?
+   * @returns string (GUID)
+   */
   static createNewGuid(): string {
     // RFC4122: The version 4 UUID is meant for generating UUIDs from truly-random or
     // pseudo-random numbers.
@@ -331,7 +430,7 @@ export class Utils {
       for (let i: number = 0; i < 36; i++) {
         if (guidHolder[i] !== "-" && guidHolder[i] !== "4") {
           // each x and y needs to be random
-          r = Math.random()  * 16 | 0;
+          r = Math.random() * 16 | 0;
         }
         if (guidHolder[i] === "x") {
           guidResponse += hex[r];
@@ -348,8 +447,10 @@ export class Utils {
     }
   }
 
-  /*
+  /** 
    * Parses out the components from a url string.
+   * 
+   * @params string
    * @returns An object with the various components. Please cache this value insted of calling this multiple times on the same url.
    */
   static GetUrlComponents(url: string): IUri {
@@ -378,8 +479,11 @@ export class Utils {
     return urlComponents;
   }
 
-  /*
+
+  /**
    * Given a url or path, append a trailing slash if one doesnt exist
+   * 
+   * @param url 
    */
   static CanonicalizeUri(url: string): string {
     if (url) {
@@ -393,9 +497,10 @@ export class Utils {
     return url;
   }
 
-  /*
+  /** 
     * Checks to see if the url ends with the suffix
     * Required because we are compiling for es5 instead of es6
+    * 
     * @param url
     * @param str
     */
@@ -407,49 +512,102 @@ export class Utils {
     return url.indexOf(suffix, url.length - suffix.length) !== -1;
   }
 
-     static checkSSO(extraQueryParameters: string) {
-        return  !(extraQueryParameters &&  ((extraQueryParameters.indexOf(Constants.login_hint) !== -1 ||  extraQueryParameters.indexOf(Constants.sid) !== -1 )));
+  static checkSSO(extraQueryParameters: string) {
+    return !(extraQueryParameters && ((extraQueryParameters.indexOf(Constants.login_hint) !== -1 || extraQueryParameters.indexOf(Constants.sid) !== -1)));
+  }
+
+  /**
+   * Constructs extraQueryParameters to be sent to the server for the AuthenticationParameters set by the developer
+   * in any login() or acquireToken() calls
+   * 
+   * //TODO: check how this behaves when domain_hint only is sent in extraparameters and idToken has no upn.
+   * //TODO: Test all paths thoroughly
+   * 
+   * @param idTokenObject 
+   * @param login_hint 
+   * @param extraQueryParameters 
+   */
+  static constructUnifiedCacheExtraQueryParameter(idTokenObject: any, login_hint: string, extraQueryParameters?: string) {
+    
+    // if login_hint is sent as a part of the request, give developer the preference
+    if (login_hint) {
+      return extraQueryParameters += "&" + Constants.login_hint + "=" + login_hint + "&" + Constants.domain_hint + "=" + Constants.organizations;
+    }
+    
+    // else extract the login_hint from the idToken; login_hint = idToken.upn
+    if (idTokenObject) {
+      if (idTokenObject.hasOwnProperty(Constants.upn)) {
+        extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.login_hint);
+        extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.domain_hint);
+        if (extraQueryParameters) {
+          return extraQueryParameters += "&" + Constants.login_hint + "=" + idTokenObject.upn + "&" + Constants.domain_hint + "=" + Constants.organizations;
+        }
+        else {
+          return extraQueryParameters = "&" + Constants.login_hint + "=" + idTokenObject.upn + "&" + Constants.domain_hint + "=" + Constants.organizations;
+        }
+      }
+      else {
+        extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.domain_hint);
+        if (extraQueryParameters) {
+          return extraQueryParameters += "&" + Constants.domain_hint + "=" + Constants.organizations;
+        }
+        else {
+          return extraQueryParameters = "&" + Constants.domain_hint + "=" + Constants.organizations;
+        }
+      }
+    }
+    return extraQueryParameters;
+  }
+
+  /**
+   * Utils function to remove the login_hint and domain_hint from the i/p extraQueryParameters
+   * @param url 
+   * @param name 
+   */
+  static urlRemoveQueryStringParameter(url: string, name: string): string {
+    if (this.isEmpty(url)) {
+      return url;
     }
 
-     static constructUnifiedCacheExtraQueryParameter(idTokenObject: any, extraQueryParameters?: string) {
-         if (idTokenObject) {
-             if (idTokenObject.hasOwnProperty(Constants.upn)) {
-                 extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.login_hint);
-                 extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.domain_hint);
-                 if (extraQueryParameters) {
-                     return extraQueryParameters += "&" + Constants.login_hint + "=" + idTokenObject.upn + "&" + Constants.domain_hint + "=" + Constants.organizations;
-                 }
-                 else {
-                     return extraQueryParameters = "&" + Constants.login_hint + "=" + idTokenObject.upn + "&" + Constants.domain_hint + "=" + Constants.organizations;
-                 }
-             }
-             else {
-                 extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.domain_hint);
-                 if (extraQueryParameters) {
-                     return extraQueryParameters += "&" + Constants.domain_hint + "=" + Constants.organizations;
-                 }
-                 else {
-                     return extraQueryParameters = "&" + Constants.domain_hint + "=" + Constants.organizations;
-                 }
-             }
-         }
-         return extraQueryParameters;
-     }
+    //
+    var regex = new RegExp("(\\&" + name + "=)[^\&]+");
+    url = url.replace(regex, "");
 
-     static urlRemoveQueryStringParameter(url: string, name: string): string {
-         if (this.isEmpty(url)) {
-             return url;
-         }
+    // name=value&
+    regex = new RegExp("(" + name + "=)[^\&]+&");
+    url = url.replace(regex, "");
 
-         var regex = new RegExp("(\\&" + name + "=)[^\&]+");
-         url = url.replace(regex, "");
-         // name=value&
-         regex = new RegExp("(" + name + "=)[^\&]+&");
-         url = url.replace(regex, "");
-         // name=value
-         regex = new RegExp("(" + name + "=)[^\&]+");
-         url = url.replace(regex, "");
-         return url;
-     }
+    // name=value
+    regex = new RegExp("(" + name + "=)[^\&]+");
+    url = url.replace(regex, "");
+
+    return url;
+  }
+
+  /**
+   * Construct extraQueryParameters from the request
+   * 
+   */
+  static constructExtraQueryParametersString (reqExtraQueryParameters: {[header: string]: string}): string {
+      
+    let extraQueryParameters: string = null;
+    let value: string;
+
+    for (var key in reqExtraQueryParameters) {
+      
+      if (key !== undefined) {
+        value = reqExtraQueryParameters[key];
+      
+        if (extraQueryParameters == null) {
+          extraQueryParameters = "&" + key + "=" + value;
+        }
+        else {
+          extraQueryParameters += "&" + key + "=" + value;
+        }
+      }
+    }
+
+    return extraQueryParameters;
+  }
 
 }

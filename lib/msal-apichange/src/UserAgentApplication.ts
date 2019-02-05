@@ -36,6 +36,7 @@ import { Account } from "./Account";
 import { Utils } from "./Utils";
 import { AuthorityFactory } from "./AuthorityFactory";
 import { TConfiguration, Configuration } from "./Configuration";
+import { AuthenticationParameters } from "./Request";
 
 declare global {
   interface Window {
@@ -106,7 +107,7 @@ export class UserAgentApplication {
    * All Config Params in a single object
    */
   pConfig: TConfiguration;
-  
+
   /** 
    * @hidden
    * TODO: Remove this from Configuration and add this as a parameter to redirect() calls
@@ -221,7 +222,7 @@ export class UserAgentApplication {
       throw new Error("Cache Location is not valid. Provided value:" + this.pConfig.cache.cacheLocation + ".Possible values are: " + this.cacheLocations.localStorage + ", " + this.cacheLocations.sessionStorage);
     }
     this.pCacheStorage = new Storage(this.pConfig.cache.cacheLocation); //cache keys msal
-    
+
     // Initialize the Window Handling code
     // TODO: refactor - write a utility function 
     window.openedWindows = [];
@@ -308,7 +309,7 @@ export class UserAgentApplication {
   }
 
 
-  /*
+  /** 
    * Initiate the login process by redirecting the user to the STS authorization endpoint.
    * @param {Array.<string>} scopes - Permissions you want included in the access token. Not all scopes are guaranteed to be included in the access token returned.
    * @param {string} extraQueryParameters - Key-value pairs to pass to the authentication server during the interactive authentication flow.
@@ -361,6 +362,11 @@ export class UserAgentApplication {
     }
   }
 
+  /**
+   * @hidden
+   * @param scopes 
+   * @param extraQueryParameters 
+   */
   private loginRedirectHelper(scopes?: Array<string>, extraQueryParameters?: string) {
     this.pLoginInProgress = true;
     this.authorityInstance.ResolveEndpointsAsync()
@@ -391,7 +397,108 @@ export class UserAgentApplication {
       });
   }
 
-  /*
+  /** 
+   * Initiate the login process by redirecting the user to the STS authorization endpoint.
+   * TODO: Refactor removing extraQueryParams
+   * 
+   * @param {Array.<string>} scopes - Permissions you want included in the access token. Not all scopes are guaranteed to be included in the access token returned.
+   * @param {string} extraQueryParameters - Key-value pairs to pass to the authentication server during the interactive authentication flow.
+   */
+  loginRedirectNew(authParams: AuthenticationParameters): void {
+    /*
+    1. Create navigate url
+    2. saves value in cache
+    3. redirect user to AAD
+     */
+    if (this.pLoginInProgress) {
+      if (this.pTokenReceivedCallback) {
+        this.pTokenReceivedCallback(ErrorDescription.loginProgressError, null, ErrorCodes.loginProgressError, Constants.idToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
+        return;
+      }
+    }
+
+    if (authParams.scopes) {
+      const isValidScope = this.validateInputScope(authParams.scopes);
+      if (isValidScope && !Utils.isEmpty(isValidScope)) {
+        if (this.pTokenReceivedCallback) {
+          this.pTokenReceivedCallback(ErrorDescription.inputScopesError, null, ErrorCodes.inputScopesError, Constants.idToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
+          return;
+        }
+      }
+      authParams.scopes = this.filterScopes(authParams.scopes);
+    }
+
+    var idTokenObject;
+    idTokenObject = this.extractADALIdToken();
+    // construct extraQueryParams string
+    let extraQueryParameters = Utils.constructExtraQueryParametersString(authParams.extraQueryParameters);
+
+    if (idTokenObject && !authParams.scopes) {
+
+      this.pConfig.system.logger.info("ADAL's idToken exists. Extracting login information from ADAL's idToken ");
+     
+      if (authParams.login_hint) {
+        extraQueryParameters = Utils.constructUnifiedCacheExtraQueryParameter(idTokenObject, authParams.login_hint, extraQueryParameters );
+      }
+
+      this.pSilentLogin = true;
+      this.acquireTokenSilent([this.pConfig.auth.clientId], this.authority, this.getAccount(), extraQueryParameters)
+        .then((idToken) => {
+          this.pSilentLogin = false;
+          this.pConfig.system.logger.info("Unified cache call is successful");
+          if (this.pTokenReceivedCallback) {
+            this.pTokenReceivedCallback.call(this, null, idToken, null, Constants.idToken, this.getAccountState(this.pSilentAuthenticationState));
+          }
+        }, (error) => {
+          this.pSilentLogin = false;
+          this.pConfig.system.logger.error("Error occurred during unified cache ATS");
+          this.loginRedirectHelperNew(authParams.scopes, extraQueryParameters);
+        });
+    }
+    else {
+      this.loginRedirectHelper(authParams.scopes, extraQueryParameters);
+    }
+  }
+
+  /**
+   * @hidden
+   * TODO: extraQueryParams - refactor
+   * 
+   * @param scopes 
+   * @param extraQueryParameters 
+   */
+  private loginRedirectHelperNew(scopes?: Array<string>, extraQueryParameters?: string) {
+    this.pLoginInProgress = true;
+    this.authorityInstance.ResolveEndpointsAsync()
+      .then(() => {
+        const authenticationRequest = new AuthenticationRequestParameters(this.authorityInstance, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+        if (extraQueryParameters) {
+          authenticationRequest.extraQueryParameters = extraQueryParameters;
+        }
+
+        var loginStartPage = this.pCacheStorage.getItem(Constants.angularLoginRequest);
+        if (!loginStartPage || loginStartPage === "") {
+          loginStartPage = window.location.href;
+        }
+        else {
+          this.pCacheStorage.setItem(Constants.angularLoginRequest, "");
+        }
+
+        this.pCacheStorage.setItem(Constants.loginRequest, loginStartPage, this.pConfig.cache.storeAuthStateInCookie);
+        this.pCacheStorage.setItem(Constants.loginError, "");
+        this.pCacheStorage.setItem(Constants.stateLogin, authenticationRequest.state, this.pConfig.cache.storeAuthStateInCookie);
+        this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce, this.pConfig.cache.storeAuthStateInCookie);
+        this.pCacheStorage.setItem(Constants.msalError, "");
+        this.pCacheStorage.setItem(Constants.msalErrorDescription, "");
+        const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
+        this.pCacheStorage.setItem(authorityKey, this.authority, this.pConfig.cache.storeAuthStateInCookie);
+        const urlNavigate = authenticationRequest.createNavigateUrl(scopes) + Constants.response_mode_fragment;
+        this.promptUser(urlNavigate);
+      });
+  }
+
+
+  /** 
    * Initiate the login process by opening a popup window.
    * @param {Array.<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token returned.
    * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the interactive authentication flow.
@@ -442,6 +549,16 @@ export class UserAgentApplication {
     });
   }
 
+  /**
+   * 
+   * @hidden
+   * TODO: extraQueryParams - refactor
+   * 
+   * @param resolve 
+   * @param reject 
+   * @param scopes 
+   * @param extraQueryParameters 
+   */
   private loginPopupHelper(resolve: any, reject: any, scopes: Array<string>, extraQueryParameters?: string) {
     //TODO why this is needed only for loginpopup
     if (!scopes) {
@@ -491,6 +608,758 @@ export class UserAgentApplication {
     }).catch((err) => {
       this.pConfig.system.logger.warning("could not resolve endpoints");
       reject(err);
+    });
+  }
+
+  /** 
+     * Initiate the login process by opening a popup window.
+     * TODO: extraQueryParams - refactor
+     * 
+     * @param {AuthenticationParameters} 
+     * @returns {Promise.<string>} - A Promise that is fulfilled when this function has completed, or rejected if an error was raised. Returns the token or error.
+     */
+  loginPopupNew(authParams: AuthenticationParameters): Promise<string> {
+    /*
+    1. Create navigate url
+    2. saves value in cache
+    3. redirect user to AAD
+     */
+    return new Promise<string>((resolve, reject) => {
+      if (this.pLoginInProgress) {
+        reject(ErrorCodes.loginProgressError + Constants.resourceDelimeter + ErrorCodes.loginProgressError);
+        return;
+      }
+
+      if (authParams.scopes) {
+        const isValidScope = this.validateInputScope(authParams.scopes);
+        if (isValidScope && !Utils.isEmpty(isValidScope)) {
+          reject(ErrorCodes.inputScopesError + Constants.resourceDelimeter + ErrorCodes.inputScopesError);
+          return;
+        }
+
+        authParams.scopes = this.filterScopes(authParams.scopes);
+      }
+
+      var idTokenObject;
+      idTokenObject = this.extractADALIdToken();
+
+      // construct extraQueryParams string
+      let extraQueryParameters = Utils.constructExtraQueryParametersString(authParams.extraQueryParameters);
+
+      if (idTokenObject && !authParams.scopes) {
+
+        this.pConfig.system.logger.info("ADAL's idToken exists. Extracting login information from ADAL's idToken ");
+
+        // TODO extraParameters - rewrite the utils function with the new structure and considering login_hint is no longer in extraQueryParameters
+        extraQueryParameters = Utils.constructUnifiedCacheExtraQueryParameter(idTokenObject, authParams.login_hint, extraQueryParameters);
+
+        this.pSilentLogin = true;
+
+        // Todo - Construct a request and add the call to new acquireTokenSilent
+        let authRequest: AuthenticationParameters = { scopes: [this.pConfig.auth.clientId], authority: this.authority, account: this.getAccount(), extraQueryParameters: authParams.extraQueryParameters};
+
+        this.acquireTokenSilentNew(authRequest)
+          .then((idToken) => {
+            this.pSilentLogin = false;
+            this.pConfig.system.logger.info("Unified cache call is successful");
+            resolve(idToken);
+          }, (error) => {
+            this.pSilentLogin = false;
+            this.pConfig.system.logger.error("Error occurred during unified cache ATS");
+            this.loginPopupHelperNew(resolve, reject, authParams.scopes, extraQueryParameters);
+          });
+
+
+        /*
+        this.acquireTokenSilent([this.pConfig.auth.clientId], this.authority, this.getAccount(), extraQueryParameters)
+          .then((idToken) => {
+            this.pSilentLogin = false;
+            this.pConfig.system.logger.info("Unified cache call is successful");
+            resolve(idToken);
+          }, (error) => {
+            this.pSilentLogin = false;
+            this.pConfig.system.logger.error("Error occurred during unified cache ATS");
+            this.loginPopupHelper(resolve, reject, authParams.scopes, extraQueryParameters);
+          });
+          */
+      }
+      else {
+        this.loginPopupHelperNew(resolve, reject, authParams.scopes, extraQueryParameters);
+      }
+    });
+  }
+
+  /**
+   * @hidden
+   * TODO: extraQueryParams - refactor
+   * 
+   * @param resolve 
+   * @param reject 
+   * @param scopes 
+   * @param extraQueryParameters 
+   */
+  loginPopupHelperNew(resolve: any, reject: any, scopes: Array<string>, extraQueryParameters?: string) {
+    //TODO why this is needed only for loginpopup
+    if (!scopes) {
+      scopes = [this.pConfig.auth.clientId];
+    }
+    const scope = scopes.join(" ").toLowerCase();
+    var popUpWindow = this.openWindow("about:blank", "_blank", 1, this, resolve, reject);
+    if (!popUpWindow) {
+      return;
+    }
+
+    this.pLoginInProgress = true;
+
+    this.authorityInstance.ResolveEndpointsAsync().then(() => {
+      const authenticationRequest = new AuthenticationRequestParameters(this.authorityInstance, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+      if (extraQueryParameters) {
+        authenticationRequest.extraQueryParameters = extraQueryParameters;
+      }
+
+      this.pCacheStorage.setItem(Constants.loginRequest, window.location.href, this.pConfig.cache.storeAuthStateInCookie);
+      this.pCacheStorage.setItem(Constants.loginError, "");
+      this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce, this.pConfig.cache.storeAuthStateInCookie);
+      this.pCacheStorage.setItem(Constants.msalError, "");
+      this.pCacheStorage.setItem(Constants.msalErrorDescription, "");
+      const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
+      this.pCacheStorage.setItem(authorityKey, this.authority, this.pConfig.cache.storeAuthStateInCookie);
+      const urlNavigate = authenticationRequest.createNavigateUrl(scopes) + Constants.response_mode_fragment;
+      window.renewStates.push(authenticationRequest.state);
+      window.requestType = Constants.login;
+      this.registerCallback(authenticationRequest.state, scope, resolve, reject);
+      if (popUpWindow) {
+        this.pConfig.system.logger.infoPii("Navigated Popup window to:" + urlNavigate);
+        popUpWindow.location.href = urlNavigate;
+      }
+
+    }, () => {
+      this.pConfig.system.logger.info(ErrorCodes.endpointResolutionError + ":" + ErrorDescription.endpointResolutionError);
+      this.pCacheStorage.setItem(Constants.msalError, ErrorCodes.endpointResolutionError);
+      this.pCacheStorage.setItem(Constants.msalErrorDescription, ErrorDescription.endpointResolutionError);
+      if (reject) {
+        reject(ErrorCodes.endpointResolutionError + ":" + ErrorDescription.endpointResolutionError);
+      }
+
+      if (popUpWindow) {
+        popUpWindow.close();
+      }
+    }).catch((err) => {
+      this.pConfig.system.logger.warning("could not resolve endpoints");
+      reject(err);
+    });
+  }
+
+
+  /** 
+   * Used to acquire an access token for a new user using interactive authentication via a popup Window.
+   * To request an id_token, pass the clientId as the only scope in the scopes array.
+   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
+   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
+   * - In Azure AD, it is of the form https://&lt;tenant&gt;/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
+   * - In Azure B2C, it is of the form https://&lt;instance&gt;/tfp/&lt;tenant&gt;/<policyName>/
+   * - Default value is: "https://login.microsoftonline.com/common".
+   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
+   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
+   * @returns {Promise.<string>} - A Promise that is fulfilled when this function has completed, or rejected if an error was raised. Returns the token or error.
+   */
+  acquireTokenPopup(scopes: Array<string>): Promise<string>;
+  acquireTokenPopup(scopes: Array<string>, authority: string): Promise<string>;
+  acquireTokenPopup(scopes: Array<string>, authority: string, account: Account): Promise<string>;
+  acquireTokenPopup(scopes: Array<string>, authority: string, account: Account, extraQueryParameters: string): Promise<string>;
+  acquireTokenPopup(scopes: Array<string>, authority?: string, account?: Account, extraQueryParameters?: string): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const isValidScope = this.validateInputScope(scopes);
+      if (isValidScope && !Utils.isEmpty(isValidScope)) {
+        reject(ErrorCodes.inputScopesError + Constants.resourceDelimeter + isValidScope);
+      }
+
+      if (scopes) {
+        scopes = this.filterScopes(scopes);
+      }
+
+      const accountObject = account ? account : this.getAccount();
+      if (this.pAcquireTokenInProgress) {
+        reject(ErrorCodes.acquireTokenProgressError + Constants.resourceDelimeter + ErrorDescription.acquireTokenProgressError);
+        return;
+      }
+
+      const scope = scopes.join(" ").toLowerCase();
+      //if user is not currently logged in and no login_hint is passed
+      if (!accountObject && !(extraQueryParameters && (extraQueryParameters.indexOf(Constants.login_hint) !== -1))) {
+        this.pConfig.system.logger.info("User login is required");
+        reject(ErrorCodes.userLoginError + Constants.resourceDelimeter + ErrorDescription.userLoginError);
+        return;
+      }
+
+      this.pAcquireTokenInProgress = true;
+      let authenticationRequest: AuthenticationRequestParameters;
+      let acquireTokenAuthority = authority ? AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
+      var popUpWindow = this.openWindow("about:blank", "_blank", 1, this, resolve, reject);
+      if (!popUpWindow) {
+        return;
+      }
+
+      acquireTokenAuthority.ResolveEndpointsAsync().then(() => {
+        if (Utils.compareObjects(accountObject, this.getAccount())) {
+          if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+            authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+          else {
+            authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+        } else {
+          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
+        }
+
+        this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce);
+        authenticationRequest.state = authenticationRequest.state;
+        var acquireTokenUserKey;
+        if (accountObject) {
+          acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + accountObject.homeAccountIdentifier + Constants.resourceDelimeter + authenticationRequest.state;
+        }
+        else {
+          acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + Constants.no_account + Constants.resourceDelimeter + authenticationRequest.state;
+        }
+
+        this.pCacheStorage.setItem(acquireTokenUserKey, JSON.stringify(accountObject));
+        const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
+        this.pCacheStorage.setItem(authorityKey, acquireTokenAuthority.CanonicalAuthority, this.pConfig.cache.storeAuthStateInCookie);
+
+        if (extraQueryParameters) {
+          authenticationRequest.extraQueryParameters = extraQueryParameters;
+        }
+
+        let urlNavigate = authenticationRequest.createNavigateUrl(scopes) + Constants.response_mode_fragment;
+        urlNavigate = this.addHintParameters(urlNavigate, accountObject);
+        window.renewStates.push(authenticationRequest.state);
+        window.requestType = Constants.renewToken;
+        this.registerCallback(authenticationRequest.state, scope, resolve, reject);
+        if (popUpWindow) {
+          popUpWindow.location.href = urlNavigate;
+        }
+
+      }, () => {
+        this.pConfig.system.logger.info(ErrorCodes.endpointResolutionError + ":" + ErrorDescription.endpointResolutionError);
+        this.pCacheStorage.setItem(Constants.msalError, ErrorCodes.endpointResolutionError);
+        this.pCacheStorage.setItem(Constants.msalErrorDescription, ErrorDescription.endpointResolutionError);
+        if (reject) {
+          reject(ErrorCodes.endpointResolutionError + Constants.resourceDelimeter + ErrorDescription.endpointResolutionError);
+        }
+        if (popUpWindow) {
+          popUpWindow.close();
+        }
+      }).catch((err) => {
+        this.pConfig.system.logger.warning("could not resolve endpoints");
+        reject(err);
+      });
+    });
+  }
+
+
+  /** 
+   * Used to acquire an access token for a new user using interactive authentication via a popup Window.
+   * To request an id_token, pass the clientId as the only scope in the scopes array.
+   * 
+   * TODO: extraQueryParameters - refactor
+   * 
+   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
+   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
+   * - In Azure AD, it is of the form https://&lt;tenant&gt;/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
+   * - In Azure B2C, it is of the form https://&lt;instance&gt;/tfp/&lt;tenant&gt;/<policyName>/
+   * - Default value is: "https://login.microsoftonline.com/common".
+   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
+   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
+   * @returns {Promise.<string>} - A Promise that is fulfilled when this function has completed, or rejected if an error was raised. Returns the token or error.
+   */
+  acquireTokenPopupNew(authParams: AuthenticationParameters): Promise<string> {
+
+    return new Promise<string>((resolve, reject) => {
+      const isValidScope = this.validateInputScope(authParams.scopes);
+      if (isValidScope && !Utils.isEmpty(isValidScope)) {
+        reject(ErrorCodes.inputScopesError + Constants.resourceDelimeter + isValidScope);
+      }
+
+      if (authParams.scopes) {
+        authParams.scopes = this.filterScopes(authParams.scopes);
+      }
+
+      // TODO check why account is not identified
+      const accountObject = authParams.account ? authParams.account : this.getAccount();
+
+      if (this.pAcquireTokenInProgress) {
+        reject(ErrorCodes.acquireTokenProgressError + Constants.resourceDelimeter + ErrorDescription.acquireTokenProgressError);
+        return;
+      }
+
+      const scope = authParams.scopes.join(" ").toLowerCase();
+      let extraQueryParameters = Utils.constructExtraQueryParametersString(authParams.extraQueryParameters);
+
+      //if user is not currently logged in and no login_hint is passed 
+      // TODO: authParams now pass login_hint
+      //if (!accountObject && !(extraQueryParameters && (extraQueryParameters.indexOf(Constants.login_hint) !== -1))) {
+        if (!accountObject && !(authParams.login_hint)) {
+          this.pConfig.system.logger.info("User login is required");
+          reject(ErrorCodes.userLoginError + Constants.resourceDelimeter + ErrorDescription.userLoginError);
+        
+          return;
+      }
+
+      this.pAcquireTokenInProgress = true;
+      let authenticationRequest: AuthenticationRequestParameters;
+      let acquireTokenAuthority = authParams.authority ? AuthorityFactory.CreateInstance(authParams.authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
+      var popUpWindow = this.openWindow("about:blank", "_blank", 1, this, resolve, reject);
+      if (!popUpWindow) {
+        return;
+      }
+
+      acquireTokenAuthority.ResolveEndpointsAsync().then(() => {
+        if (Utils.compareObjects(accountObject, this.getAccount())) {
+          if (authParams.scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+            authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+          else {
+            authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+        } else {
+          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
+        }
+
+        this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce);
+        authenticationRequest.state = authenticationRequest.state;
+        var acquireTokenUserKey;
+        if (accountObject) {
+          acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + accountObject.homeAccountIdentifier + Constants.resourceDelimeter + authenticationRequest.state;
+        }
+        else {
+          acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + Constants.no_account + Constants.resourceDelimeter + authenticationRequest.state;
+        }
+
+        this.pCacheStorage.setItem(acquireTokenUserKey, JSON.stringify(accountObject));
+        const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
+        this.pCacheStorage.setItem(authorityKey, acquireTokenAuthority.CanonicalAuthority, this.pConfig.cache.storeAuthStateInCookie);
+
+        if (extraQueryParameters) {
+          authenticationRequest.extraQueryParameters = extraQueryParameters;
+        }
+
+        let urlNavigate = authenticationRequest.createNavigateUrl(authParams.scopes) + Constants.response_mode_fragment;
+        urlNavigate = this.addHintParameters(urlNavigate, accountObject);
+        window.renewStates.push(authenticationRequest.state);
+        window.requestType = Constants.renewToken;
+        this.registerCallback(authenticationRequest.state, scope, resolve, reject);
+        if (popUpWindow) {
+          popUpWindow.location.href = urlNavigate;
+        }
+
+      }, () => {
+        this.pConfig.system.logger.info(ErrorCodes.endpointResolutionError + ":" + ErrorDescription.endpointResolutionError);
+        this.pCacheStorage.setItem(Constants.msalError, ErrorCodes.endpointResolutionError);
+        this.pCacheStorage.setItem(Constants.msalErrorDescription, ErrorDescription.endpointResolutionError);
+        if (reject) {
+          reject(ErrorCodes.endpointResolutionError + Constants.resourceDelimeter + ErrorDescription.endpointResolutionError);
+        }
+        if (popUpWindow) {
+          popUpWindow.close();
+        }
+      }).catch((err) => {
+        this.pConfig.system.logger.warning("could not resolve endpoints");
+        reject(err);
+      });
+    });
+  }
+
+  /** 
+   * Used to get the token from cache.
+   * MSAL will return the cached token if it is not expired.
+   * Or it will send a request to the STS to obtain an access_token using a hidden iframe. To renew idToken, clientId should be passed as the only scope in the scopes array.
+   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
+   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
+   * - In Azure AD, it is of the form https://&lt;tenant&gt;/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
+   * - In Azure B2C, it is of the form https://&lt;instance&gt;/tfp/&lt;tenant&gt;/<policyName>/
+   * - Default value is: "https://login.microsoftonline.com/common"
+   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
+   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
+   * @returns {Promise.<string>} - A Promise that is fulfilled when this function has completed, or rejected if an error was raised. Resolved with token or rejected with error.
+   */
+  @resolveTokenOnlyIfOutOfIframe
+  acquireTokenSilent(scopes: Array<string>, authority?: string, account?: Account, extraQueryParameters?: string): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const isValidScope = this.validateInputScope(scopes);
+      if (isValidScope && !Utils.isEmpty(isValidScope)) {
+        reject(ErrorCodes.inputScopesError + "|" + isValidScope);
+        return null;
+      } else {
+        if (scopes) {
+          scopes = this.filterScopes(scopes);
+        }
+
+        const scope = scopes.join(" ").toLowerCase();
+        const accountObject = account ? account : this.getAccount();
+        const adalIdToken = this.pCacheStorage.getItem(Constants.adalIdToken);
+        //if user is not currently logged in and no login_hint/sid is passed as an extraQueryParamater
+        if (!accountObject && Utils.checkSSO(extraQueryParameters) && Utils.isEmpty(adalIdToken)) {
+          this.pConfig.system.logger.info("User login is required");
+          reject(ErrorCodes.userLoginError + Constants.resourceDelimeter + ErrorDescription.userLoginError);
+          return null;
+        }
+        //if user didn't passes the login_hint and adal's idtoken is present and no userobject, use the login_hint from adal's idToken
+        else if (!accountObject && !Utils.isEmpty(adalIdToken)) {
+          const idTokenObject = Utils.extractIdToken(adalIdToken);
+          console.log("ADAL's idToken exists. Extracting login information from ADAL's idToken ");
+          extraQueryParameters = Utils.constructUnifiedCacheExtraQueryParameter(idTokenObject, extraQueryParameters);
+        }
+
+        let authenticationRequest: AuthenticationRequestParameters;
+        if (Utils.compareObjects(accountObject, this.getAccount())) {
+          if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+          else {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+        } else {
+          if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+          else {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+        }
+
+        const cacheResult = this.getCachedToken(authenticationRequest, accountObject);
+        if (cacheResult) {
+          if (cacheResult.token) {
+            this.pConfig.system.logger.info("Token is already in cache for scope:" + scope);
+            resolve(cacheResult.token);
+            return null;
+          }
+          else if (cacheResult.errorDesc || cacheResult.error) {
+            this.pConfig.system.logger.infoPii(cacheResult.errorDesc + ":" + cacheResult.error);
+            reject(cacheResult.errorDesc + Constants.resourceDelimeter + cacheResult.error);
+            return null;
+          }
+        }
+        else {
+          this.pConfig.system.logger.verbose("Token is not in cache for scope:" + scope);
+        }
+
+        if (!authenticationRequest.authorityInstance) {//Cache result can return null if cache is empty. In that case, set authority to default value if no authority is passed to the api.
+          authenticationRequest.authorityInstance = authority ? AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
+        }
+        // cache miss
+        return authenticationRequest.authorityInstance.ResolveEndpointsAsync()
+          .then(() => {
+            // refresh attept with iframe
+            //Already renewing for this scope, callback when we get the token.
+            if (window.activeRenewals[scope]) {
+              this.pConfig.system.logger.verbose("Renew token for scope: " + scope + " is in progress. Registering callback");
+              //Active renewals contains the state for each renewal.
+              this.registerCallback(window.activeRenewals[scope], scope, resolve, reject);
+            }
+            else {
+              if (scopes && scopes.indexOf(this.pConfig.auth.clientId) > -1 && scopes.length === 1) {
+                // App uses idToken to send to api endpoints
+                // Default scope is tracked as clientId to store this token
+                this.pConfig.system.logger.verbose("renewing idToken");
+                this.renewIdToken(scopes, resolve, reject, accountObject, authenticationRequest, extraQueryParameters);
+              } else {
+                this.pConfig.system.logger.verbose("renewing accesstoken");
+                this.renewToken(scopes, resolve, reject, accountObject, authenticationRequest, extraQueryParameters);
+              }
+            }
+          }).catch((err) => {
+            this.pConfig.system.logger.warning("could not resolve endpoints");
+            reject(err);
+            return null;
+          });
+      }
+    });
+  }
+
+
+  /** 
+   * Used to get the token from cache.
+   * 
+   * TODO: extraQueryParams - refactor
+   * 
+   * MSAL will return the cached token if it is not expired.
+   * Or it will send a request to the STS to obtain an access_token using a hidden iframe. To renew idToken, clientId should be passed as the only scope in the scopes array.
+   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
+   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
+   * - In Azure AD, it is of the form https://&lt;tenant&gt;/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
+   * - In Azure B2C, it is of the form https://&lt;instance&gt;/tfp/&lt;tenant&gt;/<policyName>/
+   * - Default value is: "https://login.microsoftonline.com/common"
+   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
+   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
+   * @returns {Promise.<string>} - A Promise that is fulfilled when this function has completed, or rejected if an error was raised. Resolved with token or rejected with error.
+   */
+  @resolveTokenOnlyIfOutOfIframe
+  acquireTokenSilentNew(authParams: AuthenticationParameters): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const isValidScope = this.validateInputScope(authParams.scopes);
+      if (isValidScope && !Utils.isEmpty(isValidScope)) {
+        reject(ErrorCodes.inputScopesError + "|" + isValidScope);
+        return null;
+      } else {
+        if (authParams.scopes) {
+          authParams.scopes = this.filterScopes(authParams.scopes);
+        }
+
+        const scope = authParams.scopes.join(" ").toLowerCase();
+        const accountObject = authParams.account ? authParams.account : this.getAccount();
+        const adalIdToken = this.pCacheStorage.getItem(Constants.adalIdToken);
+        let extraQueryParameters = Utils.constructExtraQueryParametersString(authParams.extraQueryParameters);
+
+
+        //if user is not currently logged in and no login_hint/sid is passed as an extraQueryParamater
+        // checkSSO code changes now that "sid" or "login_hint" can be sent as authentication parameters
+
+        // if (!accountObject && Utils.checkSSO(extraQueryParameters) && Utils.isEmpty(adalIdToken)) {
+        if (!accountObject && !(authParams.login_hint) && !(authParams.sid) && Utils.isEmpty(adalIdToken)) {
+          this.pConfig.system.logger.info("User login is required");
+          reject(ErrorCodes.userLoginError + Constants.resourceDelimeter + ErrorDescription.userLoginError);
+
+          return null;
+        }
+        //if user didn't passes the login_hint and adal's idtoken is present and no userobject, use the login_hint from adal's idToken
+        else if (!accountObject && !Utils.isEmpty(adalIdToken)) {
+          const idTokenObject = Utils.extractIdToken(adalIdToken);
+          console.log("ADAL's idToken exists. Extracting login information from ADAL's idToken ");
+          extraQueryParameters = Utils.constructUnifiedCacheExtraQueryParameter(idTokenObject, extraQueryParameters);
+        }
+
+        let authenticationRequest: AuthenticationRequestParameters;
+        if (Utils.compareObjects(accountObject, this.getAccount())) {
+          if (authParams.scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authParams.authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+          else {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authParams.authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+        } else {
+          if (authParams.scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authParams.authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+          else {
+            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authParams.authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
+          }
+        }
+
+        const cacheResult = this.getCachedToken(authenticationRequest, accountObject);
+        if (cacheResult) {
+          if (cacheResult.token) {
+            this.pConfig.system.logger.info("Token is already in cache for scope:" + scope);
+            resolve(cacheResult.token);
+            return null;
+          }
+          else if (cacheResult.errorDesc || cacheResult.error) {
+            this.pConfig.system.logger.infoPii(cacheResult.errorDesc + ":" + cacheResult.error);
+            reject(cacheResult.errorDesc + Constants.resourceDelimeter + cacheResult.error);
+            return null;
+          }
+        }
+        else {
+          this.pConfig.system.logger.verbose("Token is not in cache for scope:" + scope);
+        }
+
+        if (!authenticationRequest.authorityInstance) {//Cache result can return null if cache is empty. In that case, set authority to default value if no authority is passed to the api.
+          authenticationRequest.authorityInstance = authParams.authority ? AuthorityFactory.CreateInstance(authParams.authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
+        }
+        // cache miss
+        return authenticationRequest.authorityInstance.ResolveEndpointsAsync()
+          .then(() => {
+            // refresh attept with iframe
+            //Already renewing for this scope, callback when we get the token.
+            if (window.activeRenewals[scope]) {
+              this.pConfig.system.logger.verbose("Renew token for scope: " + scope + " is in progress. Registering callback");
+              //Active renewals contains the state for each renewal.
+              this.registerCallback(window.activeRenewals[scope], scope, resolve, reject);
+            }
+            else {
+              if (authParams.scopes && authParams.scopes.indexOf(this.pConfig.auth.clientId) > -1 && authParams.scopes.length === 1) {
+                // App uses idToken to send to api endpoints
+                // Default scope is tracked as clientId to store this token
+                this.pConfig.system.logger.verbose("renewing idToken");
+                this.renewIdToken(authParams.scopes, resolve, reject, accountObject, authenticationRequest, extraQueryParameters);
+              } else {
+                this.pConfig.system.logger.verbose("renewing accesstoken");
+                this.renewToken(authParams.scopes, resolve, reject, accountObject, authenticationRequest, extraQueryParameters);
+              }
+            }
+          }).catch((err) => {
+            this.pConfig.system.logger.warning("could not resolve endpoints");
+            reject(err);
+            return null;
+          });
+      }
+    });
+  }
+
+  /** 
+   * Used to obtain an access_token by redirecting the user to the authorization endpoint.
+   * To renew idToken, clientId should be passed as the only scope in the scopes array.
+   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
+   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
+   * - In Azure AD, it is of the form https://{instance}/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
+   * - In Azure B2C, it is of the form https://{instance}/tfp/&lt;tenant&gt;/<policyName>
+   * - Default value is: "https://login.microsoftonline.com/common"
+   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
+   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
+   */
+  acquireTokenRedirect(scopes: Array<string>): void;
+  acquireTokenRedirect(scopes: Array<string>, authority: string): void;
+  acquireTokenRedirect(scopes: Array<string>, authority: string, account: Account): void;
+  acquireTokenRedirect(scopes: Array<string>, authority: string, account: Account, extraQueryParameters: string): void;
+  acquireTokenRedirect(scopes: Array<string>, authority?: string, account?: Account, extraQueryParameters?: string): void {
+    const isValidScope = this.validateInputScope(scopes);
+    if (isValidScope && !Utils.isEmpty(isValidScope)) {
+      if (this.pTokenReceivedCallback) {
+        this.pTokenReceivedCallback(ErrorDescription.inputScopesError, null, ErrorCodes.inputScopesError, Constants.accessToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
+        return;
+      }
+    }
+
+    if (scopes) {
+      scopes = this.filterScopes(scopes);
+    }
+
+    const accountObject = account ? account : this.getAccount();
+    if (this.pAcquireTokenInProgress) {
+      return;
+    }
+
+    const scope = scopes.join(" ").toLowerCase();
+    if (!accountObject && !(extraQueryParameters && (extraQueryParameters.indexOf(Constants.login_hint) !== -1))) {
+      if (this.pTokenReceivedCallback) {
+        this.pConfig.system.logger.info("User login is required");
+        this.pTokenReceivedCallback(ErrorDescription.userLoginError, null, ErrorCodes.userLoginError, Constants.accessToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
+        return;
+      }
+    }
+
+    this.pAcquireTokenInProgress = true;
+    let authenticationRequest: AuthenticationRequestParameters;
+    let acquireTokenAuthority = authority ? AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
+
+    acquireTokenAuthority.ResolveEndpointsAsync().then(() => {
+      if (Utils.compareObjects(accountObject, this.getAccount())) {
+        if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+        }
+        else {
+          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
+        }
+      } else {
+        authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
+      }
+
+      this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce, this.pConfig.cache.storeAuthStateInCookie);
+      var acquireTokenUserKey;
+      if (accountObject) {
+        acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + accountObject.homeAccountIdentifier + Constants.resourceDelimeter + authenticationRequest.state;
+      }
+      else {
+        acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + Constants.no_account + Constants.resourceDelimeter + authenticationRequest.state;
+      }
+
+      this.pCacheStorage.setItem(acquireTokenUserKey, JSON.stringify(accountObject));
+      const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
+      this.pCacheStorage.setItem(authorityKey, acquireTokenAuthority.CanonicalAuthority, this.pConfig.cache.storeAuthStateInCookie);
+      if (extraQueryParameters) {
+        authenticationRequest.extraQueryParameters = extraQueryParameters;
+      }
+
+      let urlNavigate = authenticationRequest.createNavigateUrl(scopes) + Constants.response_mode_fragment;
+      urlNavigate = this.addHintParameters(urlNavigate, accountObject);
+      if (urlNavigate) {
+        this.pCacheStorage.setItem(Constants.stateAcquireToken, authenticationRequest.state, this.pConfig.cache.storeAuthStateInCookie);
+        window.location.replace(urlNavigate);
+      }
+    });
+  }
+
+  /** 
+   * Used to obtain an access_token by redirecting the user to the authorization endpoint.
+   * To renew idToken, clientId should be passed as the only scope in the scopes array.
+   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
+   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
+   * - In Azure AD, it is of the form https://{instance}/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
+   * - In Azure B2C, it is of the form https://{instance}/tfp/&lt;tenant&gt;/<policyName>
+   * - Default value is: "https://login.microsoftonline.com/common"
+   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
+   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
+   */
+  
+   acquireTokenRedirectNew(authParams: AuthenticationParameters): void {
+    const isValidScope = this.validateInputScope(authParams.scopes);
+    if (isValidScope && !Utils.isEmpty(isValidScope)) {
+      if (this.pTokenReceivedCallback) {
+        this.pTokenReceivedCallback(ErrorDescription.inputScopesError, null, ErrorCodes.inputScopesError, Constants.accessToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
+        return;
+      }
+    }
+
+    if (authParams.scopes) {
+        authParams.scopes = this.filterScopes(authParams.scopes);
+    }
+
+    const accountObject = authParams.account ? authParams.account : this.getAccount();
+    if (this.pAcquireTokenInProgress) {
+      return;
+    }
+
+    const scope = authParams.scopes.join(" ").toLowerCase();
+    let extraQueryParameters = Utils.constructExtraQueryParametersString(authParams.extraQueryParameters);
+
+    // login_hint now is a part of AuthParams
+    // if (!accountObject && !(extraQueryParameters && (extraQueryParameters.indexOf(Constants.login_hint) !== -1))) {
+    if (!accountObject && !(authParams.login_hint)) {
+      if (this.pTokenReceivedCallback) {
+        this.pConfig.system.logger.info("User login is required");
+        this.pTokenReceivedCallback(ErrorDescription.userLoginError, null, ErrorCodes.userLoginError, Constants.accessToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
+        return;
+      }
+    }
+
+    this.pAcquireTokenInProgress = true;
+    let authenticationRequest: AuthenticationRequestParameters;
+    let acquireTokenAuthority = authParams.authority ? AuthorityFactory.CreateInstance(authParams.authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
+
+    acquireTokenAuthority.ResolveEndpointsAsync().then(() => {
+      if (Utils.compareObjects(accountObject, this.getAccount())) {
+        if (authParams.scopes.indexOf(this.pConfig.auth.clientId) > -1) {
+          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
+        }
+        else {
+          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
+        }
+      } else {
+        authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, authParams.scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
+      }
+
+      this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce, this.pConfig.cache.storeAuthStateInCookie);
+      var acquireTokenUserKey;
+      if (accountObject) {
+        acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + accountObject.homeAccountIdentifier + Constants.resourceDelimeter + authenticationRequest.state;
+      }
+      else {
+        acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + Constants.no_account + Constants.resourceDelimeter + authenticationRequest.state;
+      }
+
+      this.pCacheStorage.setItem(acquireTokenUserKey, JSON.stringify(accountObject));
+      const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
+      this.pCacheStorage.setItem(authorityKey, acquireTokenAuthority.CanonicalAuthority, this.pConfig.cache.storeAuthStateInCookie);
+      if (extraQueryParameters) {
+        authenticationRequest.extraQueryParameters = extraQueryParameters;
+      }
+
+      let urlNavigate = authenticationRequest.createNavigateUrl(authParams.scopes) + Constants.response_mode_fragment;
+      urlNavigate = this.addHintParameters(urlNavigate, accountObject);
+      if (urlNavigate) {
+        this.pCacheStorage.setItem(Constants.stateAcquireToken, authenticationRequest.state, this.pConfig.cache.storeAuthStateInCookie);
+        window.location.replace(urlNavigate);
+      }
     });
   }
 
@@ -687,6 +1556,7 @@ export class UserAgentApplication {
 
     return scopes;
   }
+
   /*
    * Used to add the developer requested callback to the array of callbacks for the specified scopes. The updated array is stored on the window object
    * @param {string} scope - Developer requested permissions. Not all scopes are guaranteed to be included in the access token returned.
@@ -966,302 +1836,7 @@ export class UserAgentApplication {
     return regex.test(url);
   }
 
-  /*
-   * Used to obtain an access_token by redirecting the user to the authorization endpoint.
-   * To renew idToken, clientId should be passed as the only scope in the scopes array.
-   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
-   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
-   * - In Azure AD, it is of the form https://{instance}/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
-   * - In Azure B2C, it is of the form https://{instance}/tfp/&lt;tenant&gt;/<policyName>
-   * - Default value is: "https://login.microsoftonline.com/common"
-   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
-   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
-   */
-  acquireTokenRedirect(scopes: Array<string>): void;
-  acquireTokenRedirect(scopes: Array<string>, authority: string): void;
-  acquireTokenRedirect(scopes: Array<string>, authority: string, account: Account): void;
-  acquireTokenRedirect(scopes: Array<string>, authority: string, account: Account, extraQueryParameters: string): void;
-  acquireTokenRedirect(scopes: Array<string>, authority?: string, account?: Account, extraQueryParameters?: string): void {
-    const isValidScope = this.validateInputScope(scopes);
-    if (isValidScope && !Utils.isEmpty(isValidScope)) {
-      if (this.pTokenReceivedCallback) {
-        this.pTokenReceivedCallback(ErrorDescription.inputScopesError, null, ErrorCodes.inputScopesError, Constants.accessToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
-        return;
-      }
-    }
-
-    if (scopes) {
-      scopes = this.filterScopes(scopes);
-    }
-
-    const accountObject = account ? account : this.getAccount();
-    if (this.pAcquireTokenInProgress) {
-      return;
-    }
-
-    const scope = scopes.join(" ").toLowerCase();
-    if (!accountObject && !(extraQueryParameters && (extraQueryParameters.indexOf(Constants.login_hint) !== -1))) {
-      if (this.pTokenReceivedCallback) {
-        this.pConfig.system.logger.info("User login is required");
-        this.pTokenReceivedCallback(ErrorDescription.userLoginError, null, ErrorCodes.userLoginError, Constants.accessToken, this.getAccountState(this.pCacheStorage.getItem(Constants.stateLogin, this.pConfig.cache.storeAuthStateInCookie)));
-        return;
-      }
-    }
-
-    this.pAcquireTokenInProgress = true;
-    let authenticationRequest: AuthenticationRequestParameters;
-    let acquireTokenAuthority = authority ? AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
-
-    acquireTokenAuthority.ResolveEndpointsAsync().then(() => {
-      if (Utils.compareObjects(accountObject, this.getAccount())) {
-        if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
-          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
-        }
-        else {
-          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
-        }
-      } else {
-        authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
-      }
-
-      this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce, this.pConfig.cache.storeAuthStateInCookie);
-      var acquireTokenUserKey;
-      if (accountObject) {
-        acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + accountObject.homeAccountIdentifier + Constants.resourceDelimeter + authenticationRequest.state;
-      }
-      else {
-        acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + Constants.no_account + Constants.resourceDelimeter + authenticationRequest.state;
-      }
-
-      this.pCacheStorage.setItem(acquireTokenUserKey, JSON.stringify(accountObject));
-      const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
-      this.pCacheStorage.setItem(authorityKey, acquireTokenAuthority.CanonicalAuthority, this.pConfig.cache.storeAuthStateInCookie);
-      if (extraQueryParameters) {
-        authenticationRequest.extraQueryParameters = extraQueryParameters;
-      }
-
-      let urlNavigate = authenticationRequest.createNavigateUrl(scopes) + Constants.response_mode_fragment;
-      urlNavigate = this.addHintParameters(urlNavigate, accountObject);
-      if (urlNavigate) {
-        this.pCacheStorage.setItem(Constants.stateAcquireToken, authenticationRequest.state, this.pConfig.cache.storeAuthStateInCookie);
-        window.location.replace(urlNavigate);
-      }
-    });
-  }
-
-  /*
-   * Used to acquire an access token for a new user using interactive authentication via a popup Window.
-   * To request an id_token, pass the clientId as the only scope in the scopes array.
-   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
-   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
-   * - In Azure AD, it is of the form https://&lt;tenant&gt;/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
-   * - In Azure B2C, it is of the form https://&lt;instance&gt;/tfp/&lt;tenant&gt;/<policyName>/
-   * - Default value is: "https://login.microsoftonline.com/common".
-   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
-   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
-   * @returns {Promise.<string>} - A Promise that is fulfilled when this function has completed, or rejected if an error was raised. Returns the token or error.
-   */
-  acquireTokenPopup(scopes: Array<string>): Promise<string>;
-  acquireTokenPopup(scopes: Array<string>, authority: string): Promise<string>;
-  acquireTokenPopup(scopes: Array<string>, authority: string, account: Account): Promise<string>;
-  acquireTokenPopup(scopes: Array<string>, authority: string, account: Account, extraQueryParameters: string): Promise<string>;
-  acquireTokenPopup(scopes: Array<string>, authority?: string, account?: Account, extraQueryParameters?: string): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const isValidScope = this.validateInputScope(scopes);
-      if (isValidScope && !Utils.isEmpty(isValidScope)) {
-        reject(ErrorCodes.inputScopesError + Constants.resourceDelimeter + isValidScope);
-      }
-
-      if (scopes) {
-        scopes = this.filterScopes(scopes);
-      }
-
-      const accountObject = account ? account : this.getAccount();
-      if (this.pAcquireTokenInProgress) {
-        reject(ErrorCodes.acquireTokenProgressError + Constants.resourceDelimeter + ErrorDescription.acquireTokenProgressError);
-        return;
-      }
-
-      const scope = scopes.join(" ").toLowerCase();
-      //if user is not currently logged in and no login_hint is passed
-      if (!accountObject && !(extraQueryParameters && (extraQueryParameters.indexOf(Constants.login_hint) !== -1))) {
-        this.pConfig.system.logger.info("User login is required");
-        reject(ErrorCodes.userLoginError + Constants.resourceDelimeter + ErrorDescription.userLoginError);
-        return;
-      }
-
-      this.pAcquireTokenInProgress = true;
-      let authenticationRequest: AuthenticationRequestParameters;
-      let acquireTokenAuthority = authority ? AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
-      var popUpWindow = this.openWindow("about:blank", "_blank", 1, this, resolve, reject);
-      if (!popUpWindow) {
-        return;
-      }
-
-      acquireTokenAuthority.ResolveEndpointsAsync().then(() => {
-        if (Utils.compareObjects(accountObject, this.getAccount())) {
-          if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
-            authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
-          }
-          else {
-            authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
-          }
-        } else {
-          authenticationRequest = new AuthenticationRequestParameters(acquireTokenAuthority, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
-        }
-
-        this.pCacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce);
-        authenticationRequest.state = authenticationRequest.state;
-        var acquireTokenUserKey;
-        if (accountObject) {
-          acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + accountObject.homeAccountIdentifier + Constants.resourceDelimeter + authenticationRequest.state;
-        }
-        else {
-          acquireTokenUserKey = Constants.acquireTokenUser + Constants.resourceDelimeter + Constants.no_account + Constants.resourceDelimeter + authenticationRequest.state;
-        }
-
-        this.pCacheStorage.setItem(acquireTokenUserKey, JSON.stringify(accountObject));
-        const authorityKey = Constants.authority + Constants.resourceDelimeter + authenticationRequest.state;
-        this.pCacheStorage.setItem(authorityKey, acquireTokenAuthority.CanonicalAuthority, this.pConfig.cache.storeAuthStateInCookie);
-
-        if (extraQueryParameters) {
-          authenticationRequest.extraQueryParameters = extraQueryParameters;
-        }
-
-        let urlNavigate = authenticationRequest.createNavigateUrl(scopes) + Constants.response_mode_fragment;
-        urlNavigate = this.addHintParameters(urlNavigate, accountObject);
-        window.renewStates.push(authenticationRequest.state);
-        window.requestType = Constants.renewToken;
-        this.registerCallback(authenticationRequest.state, scope, resolve, reject);
-        if (popUpWindow) {
-          popUpWindow.location.href = urlNavigate;
-        }
-
-      }, () => {
-        this.pConfig.system.logger.info(ErrorCodes.endpointResolutionError + ":" + ErrorDescription.endpointResolutionError);
-        this.pCacheStorage.setItem(Constants.msalError, ErrorCodes.endpointResolutionError);
-        this.pCacheStorage.setItem(Constants.msalErrorDescription, ErrorDescription.endpointResolutionError);
-        if (reject) {
-          reject(ErrorCodes.endpointResolutionError + Constants.resourceDelimeter + ErrorDescription.endpointResolutionError);
-        }
-        if (popUpWindow) {
-          popUpWindow.close();
-        }
-      }).catch((err) => {
-        this.pConfig.system.logger.warning("could not resolve endpoints");
-        reject(err);
-      });
-    });
-  }
-
-  /*
-   * Used to get the token from cache.
-   * MSAL will return the cached token if it is not expired.
-   * Or it will send a request to the STS to obtain an access_token using a hidden iframe. To renew idToken, clientId should be passed as the only scope in the scopes array.
-   * @param {Array<string>} scopes - Permissions you want included in the access token. Not all scopes are  guaranteed to be included in the access token. Scopes like "openid" and "profile" are sent with every request.
-   * @param {string} authority - A URL indicating a directory that MSAL can use to obtain tokens.
-   * - In Azure AD, it is of the form https://&lt;tenant&gt;/&lt;tenant&gt;, where &lt;tenant&gt; is the directory host (e.g. https://login.microsoftonline.com) and &lt;tenant&gt; is a identifier within the directory itself (e.g. a domain associated to the tenant, such as contoso.onmicrosoft.com, or the GUID representing the TenantID property of the directory)
-   * - In Azure B2C, it is of the form https://&lt;instance&gt;/tfp/&lt;tenant&gt;/<policyName>/
-   * - Default value is: "https://login.microsoftonline.com/common"
-   * @param {User} user - The user for which the scopes are requested.The default user is the logged in user.
-   * @param {string} extraQueryParameters - Key-value pairs to pass to the STS during the  authentication flow.
-   * @returns {Promise.<string>} - A Promise that is fulfilled when this function has completed, or rejected if an error was raised. Resolved with token or rejected with error.
-   */
-  @resolveTokenOnlyIfOutOfIframe
-  acquireTokenSilent(scopes: Array<string>, authority?: string, account?: Account, extraQueryParameters?: string): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const isValidScope = this.validateInputScope(scopes);
-      if (isValidScope && !Utils.isEmpty(isValidScope)) {
-        reject(ErrorCodes.inputScopesError + "|" + isValidScope);
-        return null;
-      } else {
-        if (scopes) {
-          scopes = this.filterScopes(scopes);
-        }
-
-        const scope = scopes.join(" ").toLowerCase();
-        const accountObject = account ? account : this.getAccount();
-        const adalIdToken = this.pCacheStorage.getItem(Constants.adalIdToken);
-        //if user is not currently logged in and no login_hint/sid is passed as an extraQueryParamater
-        if (!accountObject && Utils.checkSSO(extraQueryParameters) && Utils.isEmpty(adalIdToken)) {
-          this.pConfig.system.logger.info("User login is required");
-          reject(ErrorCodes.userLoginError + Constants.resourceDelimeter + ErrorDescription.userLoginError);
-          return null;
-        }
-        //if user didn't passes the login_hint and adal's idtoken is present and no userobject, use the login_hint from adal's idToken
-        else if (!accountObject && !Utils.isEmpty(adalIdToken)) {
-          const idTokenObject = Utils.extractIdToken(adalIdToken);
-          console.log("ADAL's idToken exists. Extracting login information from ADAL's idToken ");
-          extraQueryParameters = Utils.constructUnifiedCacheExtraQueryParameter(idTokenObject, extraQueryParameters);
-        }
-
-        let authenticationRequest: AuthenticationRequestParameters;
-        if (Utils.compareObjects(accountObject, this.getAccount())) {
-          if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
-            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
-          }
-          else {
-            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.token, this.getRedirectUri(), this.pConfig.auth.state);
-          }
-        } else {
-          if (scopes.indexOf(this.pConfig.auth.clientId) > -1) {
-            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
-          }
-          else {
-            authenticationRequest = new AuthenticationRequestParameters(AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority), this.pConfig.auth.clientId, scopes, ResponseTypes.id_token_token, this.getRedirectUri(), this.pConfig.auth.state);
-          }
-        }
-
-        const cacheResult = this.getCachedToken(authenticationRequest, accountObject);
-        if (cacheResult) {
-          if (cacheResult.token) {
-            this.pConfig.system.logger.info("Token is already in cache for scope:" + scope);
-            resolve(cacheResult.token);
-            return null;
-          }
-          else if (cacheResult.errorDesc || cacheResult.error) {
-            this.pConfig.system.logger.infoPii(cacheResult.errorDesc + ":" + cacheResult.error);
-            reject(cacheResult.errorDesc + Constants.resourceDelimeter + cacheResult.error);
-            return null;
-          }
-        }
-        else {
-          this.pConfig.system.logger.verbose("Token is not in cache for scope:" + scope);
-        }
-
-        if (!authenticationRequest.authorityInstance) {//Cache result can return null if cache is empty. In that case, set authority to default value if no authority is passed to the api.
-          authenticationRequest.authorityInstance = authority ? AuthorityFactory.CreateInstance(authority, this.pConfig.auth.validateAuthority) : this.authorityInstance;
-        }
-        // cache miss
-        return authenticationRequest.authorityInstance.ResolveEndpointsAsync()
-          .then(() => {
-            // refresh attept with iframe
-            //Already renewing for this scope, callback when we get the token.
-            if (window.activeRenewals[scope]) {
-              this.pConfig.system.logger.verbose("Renew token for scope: " + scope + " is in progress. Registering callback");
-              //Active renewals contains the state for each renewal.
-              this.registerCallback(window.activeRenewals[scope], scope, resolve, reject);
-            }
-            else {
-              if (scopes && scopes.indexOf(this.pConfig.auth.clientId) > -1 && scopes.length === 1) {
-                // App uses idToken to send to api endpoints
-                // Default scope is tracked as clientId to store this token
-                this.pConfig.system.logger.verbose("renewing idToken");
-                this.renewIdToken(scopes, resolve, reject, accountObject, authenticationRequest, extraQueryParameters);
-              } else {
-                this.pConfig.system.logger.verbose("renewing accesstoken");
-                this.renewToken(scopes, resolve, reject, accountObject, authenticationRequest, extraQueryParameters);
-              }
-            }
-          }).catch((err) => {
-            this.pConfig.system.logger.warning("could not resolve endpoints");
-            reject(err);
-            return null;
-          });
-      }
-    });
-  }
-
+  
   private extractADALIdToken(): any {
     const adalIdToken = this.pCacheStorage.getItem(Constants.adalIdToken);
     if (!Utils.isEmpty(adalIdToken)) {

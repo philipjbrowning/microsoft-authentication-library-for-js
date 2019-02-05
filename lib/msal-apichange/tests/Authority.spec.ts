@@ -40,7 +40,7 @@ describe("Authority", () => {
             let promise = authority.ResolveEndpointsAsync();
 
             // Assert
-            verifyAuthority(promise, authority, done;
+            verifyAuthority(promise, authority, done);
         });
 
         it("can be resolved for untrusted hosts", (done) => {
@@ -51,7 +51,7 @@ describe("Authority", () => {
                 responseText: validOpenIdConfigurationResponse
             });
             jasmine.Ajax.stubRequest(/.*discovery\/instance/i).andReturn({
-                responseText: "{'tenant_discovery_endpoint':'https://tenant_discovery_endpoint/openid-configuration'}"
+                responseText: '{"tenant_discovery_endpoint":"https://tenant_discovery_endpoint/openid-configuration"}'
             });
 
             // Act
@@ -151,14 +151,14 @@ describe("Authority", () => {
         it("is thrown when tenant discovery endpoint fails with invalid data", (done) => {
             verifyError(done, {
                 status: 500,
-                responseText: "fatalError"
+                responseText: 'fatalError'
             }, "fatalError");
         });
 
         it("is thrown when tenant discovery endpoint fails with error details", (done) => {
             verifyError(done, {
                 status: 400,
-                responseText: "{'error': 'OMG_EPIC_FAIL'}"
+                responseText: '{"error": "OMG_EPIC_FAIL"}'
             }, "OMG_EPIC_FAIL");
         });
 
