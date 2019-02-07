@@ -22,7 +22,6 @@
   */
 
 import {Constants} from "./Constants";
-import {cache} from "awesome-typescript-loader/dist/cache";
 
 /**
  * @hidden
@@ -51,8 +50,20 @@ export class MSALClientException extends MSALException {
         return new MSALClientException("Error in Could not resolve endpoints. Please check network and try again.");
     }
 
-    static createTokenCacheResultException(scope: string, cacheError: string) : MSALClientException {
-        return new MSALClientException("Error retrieving cache result for scope: " + scope + ". Description: " + cacheError);
+    static createMultipleMatchingTokensInCacheException(scope: string) : MSALClientException {
+        return new MSALClientException("Cache error for scope " + scope + ": The cache contains multiple tokens satisfying the requirements. Call AcquireToken again providing more requirements like authority.");
+    }
+
+    static createMultipleAuthoritiesInCacheException(scope: string) : MSALClientException {
+        return new MSALClientException("Cache error for scope " + scope + ": Multiple authorities found in the cache. Pass authority in the API overload.");
+    }
+
+    static createPopupWindowError() : MSALClientException {
+        return new MSALClientException("Error opening popup window. This can happen if you are using IE or if popups are blocked in the browser.");
+    }
+
+    static createTokenRenewalTimeoutError() : MSALClientException {
+        return new MSALClientException("Token renewal operation failed due to timeout.");
     }
 }
 
@@ -61,22 +72,22 @@ export class MSALClientException extends MSALException {
  *
  * Exception thrown when there is an error in the asynchronous client code running on the browser.
  */
-export class MSALClientAsyncException extends MSALClientException {
+export class MSALClientProgressException extends MSALClientException {
     constructor(message: string) {
         super(message);
         this.name = "MSALClientAsyncException";
     }
 
-    static createLoginInProgressError() : MSALClientAsyncException {
-        return new MSALClientAsyncException("Login_In_Progress: Error during login call - login is already in progress.");
+    static createLoginInProgressError() : MSALClientProgressException {
+        return new MSALClientProgressException("Login_In_Progress: Error during login call - login is already in progress.");
     }
 
-    static createAcquireTokenInProgressError() : MSALClientAsyncException {
-        return new MSALClientAsyncException("AcquireToken_In_Progress: Error during login call - login is already in progress.");
+    static createAcquireTokenInProgressError() : MSALClientProgressException {
+        return new MSALClientProgressException("AcquireToken_In_Progress: Error during login call - login is already in progress.");
     }
 
-    static createUserCancelledException() : MSALClientAsyncException {
-        return new MSALClientAsyncException("User_Cancelled: User cancelled ")
+    static createUserCancelledException() : MSALClientProgressException {
+        return new MSALClientProgressException("User_Cancelled: User cancelled ")
     }
 }
 
