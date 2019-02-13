@@ -155,26 +155,37 @@ export type TConfiguration = {
  *
  * @returns TConfiguration object
  */
-export function Configuration(
-    // destructure with default setting
-    { clientId = "", authority = null, validateAuthority = true, redirectUri = () => window.location.href.split("?")[0].split("#")[0], postLogoutRedirectUri = () => window.location.href.split("?")[0].split("#")[0], state = "", navigateToLoginRequestUrl = true }: TAuthOptions = {clientId},
-    { cacheLocation = "localStorage", storeAuthStateInCookie = false }: TCacheOptions = {},
-    { loadFrameTimeout = 6000, tokenRenewalOffsetSeconds = 300 }: TSystemOptions= {},
-    { isAngular = false, unprotectedResources = new Array<string>(), protectedResourceMap = new Map<string, Array<string>>() }: TFrameworkOptions = {}
-) {
-    // restructure
-    let config = {
-        auth: { clientId, authority, validateAuthority, redirectUri, postLogoutRedirectUri, state, navigateToLoginRequestUrl },
-        cache: { cacheLocation, storeAuthStateInCookie },
-        system: { loadFrameTimeout, tokenRenewalOffsetSeconds },
-        framework: { isAngular, unprotectedResources, protectedResourceMap }
-    };
 
-    return config;
+export class Configuration {
+    static buildConfiguration(
+        // destructure with default setting
+        {clientId = "", authority = null, validateAuthority = true, redirectUri = () => window.location.href.split("?")[0].split("#")[0], postLogoutRedirectUri = () => window.location.href.split("?")[0].split("#")[0], state = "", navigateToLoginRequestUrl = true}: TAuthOptions = {clientId},
+        {cacheLocation = "localStorage", storeAuthStateInCookie = false}: TCacheOptions = {},
+        {logger = new Logger(null), loadFrameTimeout = 6000, tokenRenewalOffsetSeconds = 300}: TSystemOptions = {},
+        {isAngular = false, unprotectedResources = new Array<string>(), protectedResourceMap = new Map<string, Array<string>>()}: TFrameworkOptions = {}
+    ) {
+        // restructure
+        let config = {
+            auth: {
+                clientId,
+                authority,
+                validateAuthority,
+                redirectUri,
+                postLogoutRedirectUri,
+                state,
+                navigateToLoginRequestUrl
+            },
+            cache: {cacheLocation, storeAuthStateInCookie},
+            system: {logger, loadFrameTimeout, tokenRenewalOffsetSeconds},
+            framework: {isAngular, unprotectedResources, protectedResourceMap}
+        };
+
+        return config;
+    }
 }
 
 /**
  * Test Code
- * var c:TConfiguration = Configuration({clientId: "TestClient "}, {}, {}, {isAngular: true});
+ * var c:TConfiguration = buildConfiguration({clientId: "TestClient "}, {}, {}, {isAngular: true});
  * console.log(c);
 */

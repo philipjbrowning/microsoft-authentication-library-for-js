@@ -25,6 +25,8 @@
     "node": ">=0.8.0"
   },
   "dependencies": {
+    "acorn": "^6.0.7",
+    "acorn-dynamic-import": "^4.0.0",
     "tslib": "1.7.1"
   },
   "devDependencies": {
@@ -36,6 +38,7 @@
     "awesome-typescript-loader": "^3.2.3",
     "babel-polyfill": "^6.26.0",
     "fork-ts-checker-webpack-plugin": "^0.5.1",
+    "growl": "^1.10.5",
     "grunt": "^1.0.3",
     "grunt-banner": "^0.6.0",
     "grunt-contrib-uglify": "^2.3.0",
@@ -48,9 +51,9 @@
     "jasmine": "^2.8.0",
     "jasmine-ajax": "^3.3.1",
     "jasmine-core": "^2.5.2",
-    "jasmine-node": "^1.16.2",
+    "jasmine-node": "^2.0.1",
     "jshint": "^2.9.7",
-    "karma": "^2.0.4",
+    "karma": "^4.0.0",
     "karma-chrome-launcher": "^2.0.0",
     "karma-cli": "^1.0.1",
     "karma-coverage-istanbul-reporter": "^2.0.1",
@@ -63,7 +66,7 @@
     "karma-remap-istanbul": "^0.6.0",
     "karma-sourcemap-loader": "^0.3.7",
     "karma-spec-reporter": "0.0.32",
-    "karma-typescript": "^3.0.13",
+    "karma-typescript": "^4.0.0",
     "karma-verbose-reporter": "0.0.6",
     "karma-webpack": "^4.0.0-rc.5",
     "phantomjs-polyfill": "0.0.2",
@@ -71,7 +74,7 @@
     "sourcemap-istanbul-instrumenter-loader": "^0.2.0",
     "terser": "^3.14.1",
     "ts-loader": "^5.3.1",
-    "tslint": "^5.8.0",
+    "tslint": "^5.12.1",
     "typedoc": "^0.6.0",
     "typescript": "^2.5.3",
     "typings": "^2.1.1",
@@ -86,7 +89,7 @@
     "clean": "shx rm -rf dist docs lib-commonjs lib-es6",
     "doc": "typedoc --out ./docs ./src/**/* --gitRevision dev",
     "build:modules": "tsc && tsc -m es6 --outDir lib-es6",
-    "build": "npm run clean && npm run doc && npm run build:modules && webpack && grunt && npm run test",
+    "build": "npm run clean && npm run doc && npm run build:modules && webpack && grunt && npm test",
     "test": "typings install && karma start && jasmine-node --nohelpers tests/MSALSpec.js"
   }
 }

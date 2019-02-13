@@ -529,13 +529,14 @@ export class Utils {
    */
   static constructUnifiedCacheExtraQueryParameter(idTokenObject: any, login_hint: string, extraQueryParameters?: string) {
     
-    // if login_hint is sent as a part of the request, give developer the preference
+    // if login_hint is sent as a part of the request, give developer priority the preference
     if (login_hint) {
       return extraQueryParameters += "&" + Constants.login_hint + "=" + login_hint + "&" + Constants.domain_hint + "=" + Constants.organizations;
     }
     
     // else extract the login_hint from the idToken; login_hint = idToken.upn
     if (idTokenObject) {
+      // if upn is present in idToken, construct login_hint and domain_hint from the idToken
       if (idTokenObject.hasOwnProperty(Constants.upn)) {
         extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.login_hint);
         extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.domain_hint);
@@ -546,6 +547,7 @@ export class Utils {
           return extraQueryParameters = "&" + Constants.login_hint + "=" + idTokenObject.upn + "&" + Constants.domain_hint + "=" + Constants.organizations;
         }
       }
+      // since upn is not present in idToken, proceed with domain_hint
       else {
         extraQueryParameters = this.urlRemoveQueryStringParameter(extraQueryParameters, Constants.domain_hint);
         if (extraQueryParameters) {
@@ -556,6 +558,7 @@ export class Utils {
         }
       }
     }
+    
     return extraQueryParameters;
   }
 

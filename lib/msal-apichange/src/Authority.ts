@@ -28,7 +28,7 @@ import { XhrClient } from "./XHRClient";
  */
 
 
-/*
+/** 
  * @hidden
  */
 export enum AuthorityType {
@@ -37,7 +37,7 @@ export enum AuthorityType {
   B2C
 }
 
-/*
+/**
  * @hidden
  */
 export abstract class Authority {
@@ -102,14 +102,14 @@ export abstract class Authority {
     return this.canonicalAuthorityUrlComponents;
   }
 
-  /*
+  /**
    * // http://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
    */
   protected get DefaultOpenIdConfigurationEndpoint(): string {
     return `${this.CanonicalAuthority}v2.0/.well-known/openid-configuration`;
   }
 
-  /*
+  /** 
    * Given a string, validate that it is of the form https://domain/path
    */
   private validateAsUri() {
@@ -129,22 +129,22 @@ export abstract class Authority {
     }
   }
 
-  /*
+  /** 
    * Calls the OIDC endpoint and returns the response
    */
   private DiscoverEndpoints(openIdConfigurationEndpoint: string): Promise<ITenantDiscoveryResponse> {
     let client = new XhrClient();
     return client.sendRequestAsync(openIdConfigurationEndpoint, "GET", /*enableCaching: */ true)
-        .then((response: any) => {
-            return <ITenantDiscoveryResponse>{
-                AuthorizationEndpoint: response.authorization_endpoint,
-                EndSessionEndpoint: response.end_session_endpoint,
-                Issuer: response.issuer
-            };
-        });
+      .then((response: any) => {
+        return <ITenantDiscoveryResponse>{
+          AuthorizationEndpoint: response.authorization_endpoint,
+          EndSessionEndpoint: response.end_session_endpoint,
+          Issuer: response.issuer
+        };
+      });
   }
 
-  /*
+  /** 
    * Returns a promise.
    * Checks to see if the authority is in the cache
    * Discover endpoints via openid-configuration
@@ -161,7 +161,7 @@ export abstract class Authority {
     });
   }
 
-  /*
+  /** 
    * Returns a promise with the TenantDiscoveryEndpoint
    */
   public abstract GetOpenIdConfigurationEndpointAsync(): Promise<string>;

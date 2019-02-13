@@ -70,7 +70,7 @@ export class Logger {// Singleton Class
       } = {}) {
       const {
           correlationId = "",
-          level = LogLevel.Info,
+          level = LogLevel.Verbose,
           piiLoggingEnabled = false
       } = options;
 
@@ -84,6 +84,7 @@ export class Logger {// Singleton Class
    * @hidden
    */
   private logMessage(logLevel: LogLevel, logMessage: string, containsPii: boolean): void {
+
     if ((logLevel > this._level) || (!this._piiLoggingEnabled && containsPii)) {
       return;
     }

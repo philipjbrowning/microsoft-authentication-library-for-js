@@ -7,3 +7,4 @@ export { TokenResponse} from "./RequestInfo";
 export {Authority} from "./Authority";
 export {CacheResult} from "./UserAgentApplication";
 export {TConfiguration} from "./Configuration";
+export {Configuration} from "./Configuration";

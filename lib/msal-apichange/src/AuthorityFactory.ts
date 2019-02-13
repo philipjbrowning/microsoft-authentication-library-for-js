@@ -21,7 +21,7 @@
  * OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/*
+/** 
  * @hidden
  */
 import { Utils } from "./Utils";
@@ -30,14 +30,17 @@ import { B2cAuthority } from "./B2cAuthority";
 import { Authority, AuthorityType } from "./Authority";
 import { ErrorMessage } from "./ErrorMessage";
 
+/**
+ * AuthorityFactory to create an Authority instance, validates the authority when user chooses the same
+ */
 export class AuthorityFactory {
-    /*
-    * Parse the url and determine the type of authority
-    */
+    // Parse the url and determine the type of authority
     private static DetectAuthorityFromUrl(authorityUrl: string): AuthorityType {
+
         authorityUrl = Utils.CanonicalizeUri(authorityUrl);
         let components = Utils.GetUrlComponents(authorityUrl);
         let pathSegments = components.PathSegments;
+
         switch (pathSegments[0]) {
             case "tfp":
                 return AuthorityType.B2C;
@@ -48,10 +51,8 @@ export class AuthorityFactory {
         }
     }
 
-    /*
-    * Create an authority object of the correct type based on the url
-    * Performs basic authority validation - checks to see if the authority is of a valid type (eg aad, b2c)
-    */
+    // Create an authority object of the correct type based on the url
+    // Performs basic authority validation - checks to see if the authority is of a valid type (eg aad, b2c)
     public static CreateInstance(authorityUrl: string, validateAuthority: boolean): Authority {
         if (Utils.isEmpty(authorityUrl)) {
             return null;

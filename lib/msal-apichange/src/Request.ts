@@ -39,6 +39,7 @@ export type AuthenticationParameters = {
     claimsRequest?: null;        
     authority?: string;                         
     correlationId?: string;
+    
     account?: Account;
     sid?: string;
     login_hint?: string;
