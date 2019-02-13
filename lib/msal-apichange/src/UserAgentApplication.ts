@@ -1766,6 +1766,7 @@ export class UserAgentApplication {
     }
 
     if (accessTokenCacheItem != null) {
+        // TODO: Change the name of these booleans to reflect code paths
       const expired = Number(accessTokenCacheItem.value.expiresIn);
       // If expiration is within offset, it will force renew
       const offset = this.pConfig.system.tokenRenewalOffsetSeconds || 300;
