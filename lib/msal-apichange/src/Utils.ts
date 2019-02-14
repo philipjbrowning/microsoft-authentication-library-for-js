@@ -512,6 +512,10 @@ export class Utils {
     return url.indexOf(suffix, url.length - suffix.length) !== -1;
   }
 
+  /**
+   * 
+   * @param extraQueryParameters 
+   */
   static checkSSO(extraQueryParameters: string) {
     return !(extraQueryParameters && ((extraQueryParameters.indexOf(Constants.login_hint) !== -1 || extraQueryParameters.indexOf(Constants.sid) !== -1)));
   }

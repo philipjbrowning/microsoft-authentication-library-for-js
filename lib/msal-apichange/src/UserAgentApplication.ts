@@ -617,12 +617,13 @@ export class UserAgentApplication {
   private loginPopupHelper(resolve: any, reject: any, scopes: Array<string>, extraQueryParameters?: string) {
 
     // DEBUG
-    this.pConfig.system.logger.verbose("Is the helper called? Am I silent logging in?");
+    console.log("In loginPopupHelper");
 
-    //TODO why this is needed only for loginpopup
+    // TODO: why this is needed only for loginpopup
     if (!scopes) {
       scopes = [this.pConfig.auth.clientId];
     }
+
     const scope = scopes.join(" ").toLowerCase();
     var popUpWindow = this.openWindow("about:blank", "_blank", 1, this, resolve, reject);
     if (!popUpWindow) {
@@ -632,7 +633,6 @@ export class UserAgentApplication {
     this.pLoginInProgress = true;
 
     this.authorityInstance.ResolveEndpointsAsync().then(() => {
-
       const authenticationRequest = new AuthenticationRequestParameters(this.authorityInstance, this.pConfig.auth.clientId, scopes, ResponseTypes.id_token, this.getRedirectUri(), this.pConfig.auth.state);
       if (extraQueryParameters) {
         authenticationRequest.extraQueryParameters = extraQueryParameters;
@@ -659,6 +659,7 @@ export class UserAgentApplication {
       this.pConfig.system.logger.info(ErrorCodes.endpointResolutionError + ":" + ErrorDescription.endpointResolutionError);
       this.pCacheStorage.setItem(Constants.msalError, ErrorCodes.endpointResolutionError);
       this.pCacheStorage.setItem(Constants.msalErrorDescription, ErrorDescription.endpointResolutionError);
+
       if (reject) {
         reject(ErrorCodes.endpointResolutionError + ":" + ErrorDescription.endpointResolutionError);
       }
@@ -1624,8 +1625,10 @@ export class UserAgentApplication {
     return scopes;
   }
 
-  /*
-   * Used to add the developer requested callback to the array of callbacks for the specified scopes. The updated array is stored on the window object
+  /**
+   * Used to add the developer requested callback to the array of callbacks for the specified scopes.
+   * The updated array is stored on the window object
+   * 
    * @param {string} scope - Developer requested permissions. Not all scopes are guaranteed to be included in the access token returned.
    * @param {string} expectedState - Unique state identifier (guid).
    * @param {Function} resolve - The resolve function of the promise object.
@@ -1661,7 +1664,11 @@ export class UserAgentApplication {
     }
   }
 
-
+    /**
+     *
+     * @param scopes
+     * @param account
+     */
   protected getCachedTokenInternal(scopes: Array<string>, account: Account): CacheResult {
     const userObject = account ? account : this.getAccount();
     if (!userObject) {
