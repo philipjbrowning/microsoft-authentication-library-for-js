@@ -2351,7 +2351,7 @@ export class UserAgentApplication {
    * @ignore
    * @hidden
    */
-  private getRedirectUri(): string {
+  public getRedirectUri(): string {
     if (typeof this._redirectUri === "function") {
       return this._redirectUri();
     }
@@ -2363,7 +2363,7 @@ export class UserAgentApplication {
    * @ignore
    * @hidden
    */
-  private getPostLogoutRedirectUri(): string {
+  public getPostLogoutRedirectUri(): string {
     if (typeof this._postLogoutredirectUri === "function") {
       return this._postLogoutredirectUri();
     }
