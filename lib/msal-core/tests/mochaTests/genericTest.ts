@@ -1,175 +1,106 @@
 import * as Mocha from "mocha";
-import { expect } from "chai";
+import * as chai from "chai";
 import {UserAgentApplication, AuthError, ClientConfigurationError, ClientAuthError} from '../../src/index';
 import { Constants, ErrorCodes, ErrorDescription} from '../../src/Constants';
 import {Authority} from "../../src/Authority";
 import {AuthenticationRequestParameters} from "../../src/AuthenticationRequestParameters";
 import {AuthorityFactory} from "../../src/AuthorityFactory";
-import { jsdom } from "mocha-jsdom";
+const expect = chai.expect;
+chai.config.includeStack = false;
 
 describe("Redirect Flow Unit Tests", function () {
-    // let window: Window;
-    let msal: UserAgentApplication;
+    var msal: UserAgentApplication;
 
-    // var mockFrames = {};
-    // var documentMock = {
-    //     getElementById: function (frameId: any) {
-    //         if (!mockFrames[frameId]) {
-    //             mockFrames[frameId] = { src: 'start' };
-    //         }
-    //         return mockFrames[frameId];
-    //     }
-    // };
-    jsdom();
     var DEFAULT_INSTANCE = "https://login.microsoftonline.com/";
     var TEST_REDIR_URI = "https://localhost:8081/redirect.html"
     var TENANT = 'common';
     var validAuthority = DEFAULT_INSTANCE + TENANT;
-    // let global = <any>{};
 
-    var mockStorage = function() {
-        var store = {};
-
-        var accessTokenCacheItem = {
-            key: {
-                authority: "",
-                clientId: "",
-                scopes: "",
-                userIdentifer: ""
-            },
-            value: {
-                accessToken: "",
-                idToken: "",
-                expiresIn: "",
-                clientInfo: ""
-            }
-        }
-
-        return {
-            getItem: function (key: any, storeAuthStateInCookie?: boolean) {
-                if (storeAuthStateInCookie) {
-                    return this.getItemCookie(key);
-                }
-                return store[key];
-            },
-            setItem: function (key: any, value: any, storeAuthStateInCookie?: boolean) {
-                if (typeof value != 'undefined') {
-                    store[key] = value;
-                }
-                if (storeAuthStateInCookie) {
-                    this.setItemCookie(key, value);
-                }
-
-            },
-            removeItem: function (key: any) {
-                if (typeof store[key] != 'undefined') {
-                    delete store[key];
-                }
-            },
-            clear: function () {
-                store = {};
-            },
-            storeVerify: function () {
-                return store;
-            },
-            getAllAccessTokens: function (clientId: any, userIdentifier: any) {
-                var results = [];
-                for (var key in store) {
-                    if (store.hasOwnProperty(key)) {
-                        if (key.match(clientId) && key.match(userIdentifier)) {
-                            let value = this.getItem(key);
-                            if (value) {
-                                let accessTokenCacheItem = <any>{};
-                                accessTokenCacheItem.key = JSON.parse(key);
-                                accessTokenCacheItem.value = JSON.parse(value);
-                                results.push(accessTokenCacheItem);
-                            }
-                        }
-                    }
-                }
-                return results;
-            },
-
-            setItemCookie(cName: string, cValue: string, expires?: number): void {
-                var cookieStr = cName + "=" + cValue + ";";
-                if (expires) {
-                    var expireTime = this.setExpirationCookie(expires);
-                    cookieStr += "expires=" + expireTime + ";";
-                }
-
-                document.cookie = cookieStr;
-            },
-
-            getItemCookie(cName: string): string {
-                var name = cName + "=";
-                var ca = document.cookie.split(';');
-                for (var i = 0; i < ca.length; i++) {
-                    var c = ca[i];
-                    while (c.charAt(0) == ' ') {
-                        c = c.substring(1);
-                    }
-                    if (c.indexOf(name) == 0) {
-                        return c.substring(name.length, c.length);
-                    }
-                }
-                return "";
-            },
-
-            removeAcquireTokenEntries: function () {
-                return;
-            },
-
-            setExpirationCookie(cookieLife: number): string {
-                var today = new Date();
-                var expr = new Date(today.getTime() + cookieLife * 24 * 60 * 60 * 1000);
-                return expr.toUTCString();
-            },
-
-            clearCookie(): void {
-                this.setItemCookie(Constants.nonceIdToken, '', -1);
-                this.setItemCookie(Constants.stateLogin, '', -1);
-                this.setItemCookie(Constants.loginRequest, '', -1);
-            }
-        };
-    }();
+    var write, log, output = '';
 
     beforeEach(function() {
-        // mockStorage.clear();
-        
-        // let $window: any = {
-        //     location: {
-        //         hash: '#hash',
-        //         href: 'href',
-        //         replace: function (val: any) {
-        //         }
-        //     },
-        //     localStorage: {},
-        //     sessionStorage: {},
-        //     innerWidth: 100,
-        //     innerHeight: 100
-        // };
-        // $window.localStorage = mockStorage;
-        // $window.sessionStorage = mockStorage;
-        
-        // // Initialize
-        
-        // global.window = $window;
-        // global.localStorage = mockStorage;
-        // global.sessionStorage = mockStorage;
-        // global.document = documentMock;
+        this.jsdom = require("jsdom-global")("", { url: TEST_REDIR_URI });
 
         msal = new UserAgentApplication("0813e1d1-ad72-46a9-8665-399bba48c201", null);
         const validOpenIdConfigurationResponse = `{"authorization_endpoint":"${validAuthority}/oauth2/v2.0/authorize","token_endpoint":"https://token_endpoint","issuer":"https://fakeIssuer", "end_session_endpoint":"https://end_session_endpoint"}`;
+        
     });
 
     it("throws error if loginRedirect is called without calling setRedirectCallbacks", function (done) {
-        expect(msal.getRedirectUri()).to.be(window.location.href);
-        try {
-            msal.loginRedirect();
-        } catch (e) {
-            expect(e).to.be.a.instanceOf(ClientConfigurationError);
-        }
+        expect(msal.getRedirectUri()).to.be.equal(window.location.href);
+        expect(msal.loginRedirect.bind(msal)).to.throw(ClientConfigurationError);
         done();
+    });
+    
+    it('throws error if null or non-function argument is passed to either argument of setRedirectCallbacks', (done) => {
+        expect(() => msal.setRedirectCallbacks(function(token, tokenType, state) {}, null)).to.throw(ClientConfigurationError);
+        expect(() => msal.setRedirectCallbacks(null, function(err, state) {})).to.throw(ClientConfigurationError);
+        done();
+    });
+
+    it('navigates user to login and prompt parameter is not passed by default', (done) => {
+        msal.setRedirectCallbacks(function(token, tokenType, state) {}, function (error) {});
+        expect(msal.getRedirectUri()).to.be.equal(global.window.location.href);
+        msal.promptUser = function (args: string) {
+            expect(args).toContain(DEFAULT_INSTANCE + TENANT + '/oauth2/v2.0/authorize?response_type=id_token&scope=openid%20profile');
+            expect(args).toContain('&client_id=' + msal.clientId);
+            expect(args).toContain('&redirect_uri=' + encodeURIComponent(msal.getRedirectUri()));
+            expect(args).toContain('&state');
+            expect(args).toContain('&client_info=1');
+            expect(args).not.toContain(Constants.prompt_select_account);
+            expect(args).not.toContain(Constants.prompt_none);
+            done();
+        };
+
+        msal.loginRedirect();
+
+    });
+
+    it('navigates user to login and prompt parameter is passed as extraQueryParameter', (done) => {
+        msal.setRedirectCallbacks(function(token, tokenType, state) {}, function (error) {});
+        expect(msal.getRedirectUri()).toBe(global.window.location.href);
+        msal.promptUser = function (args: string) {
+            expect(args).toContain(DEFAULT_INSTANCE + TENANT + '/oauth2/v2.0/authorize?response_type=id_token&scope=openid%20profile');
+            expect(args).toContain('&client_id=' + msal.clientId);
+            expect(args).toContain('&redirect_uri=' + encodeURIComponent(msal.getRedirectUri()));
+            expect(args).toContain('&state');
+            expect(args).toContain('&client_info=1');
+            expect(args).toContain(Constants.prompt_select_account);
+            expect(args).not.toContain(Constants.prompt_none);
+            done();
+        };
+
+        msal.loginRedirect(null, Constants.prompt_select_account);
+    });
+
+    it('navigates user to redirectURI passed as extraQueryParameter', (done) => {
+        msal = new UserAgentApplication("0813e1d1-ad72-46a9-8665-399bba48c201", null, { redirectUri: TEST_REDIR_URI });
+        msal.setRedirectCallbacks(function(token, tokenType, state) {}, function (error) {});
+        msal._user = null;
+        msal._renewStates = [];
+        msal._activeRenewals = {};
+        msal._cacheStorage = storageFake;
+        expect(msal._redirectUri).toBe(TEST_REDIR_URI);
+        msal.promptUser = function (args: string) {
+            expect(args).toContain(DEFAULT_INSTANCE + TENANT + '/oauth2/v2.0/authorize?response_type=id_token&scope=openid%20profile');
+            expect(args).toContain('&client_id=' + msal.clientId);
+            expect(args).toContain('&redirect_uri=' + encodeURIComponent(msal._redirectUri));
+            expect(args).toContain('&state');
+            expect(args).toContain('&client_info=1');
+            done();
+        };
+
+        msal.loginRedirect();
+    });
+
+    it('uses current location.href as returnUri by default, even if location changed after UserAgentApplication was instantiated', (done) => {
+        history.pushState(null, null, '/new_pushstate_uri');
+        msal.setRedirectCallbacks(function(token, tokenType, state) {}, function (error) {});
+        msal.promptUser = function (args: string) {
+            expect(args).toContain('&redirect_uri=' + encodeURIComponent('http://localhost:8080/new_pushstate_uri'));
+            done();
+        };
+        msal.loginRedirect();
     });
 
 });

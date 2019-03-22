@@ -32,7 +32,7 @@
     "test": "typings install && karma start && jasmine-node --nohelpers tests/MSALSpec.js",
     "lint": "tslint -c tslint.json src/**/*.ts",
     "build:webpack": "webpack",
-    "mochatest": "mocha --require ts-node/register tests/mochaTests/**/*.ts"
+    "mochatest": "mocha --reporter-options silent --require ts-node/register  --require jsdom-global/register tests/mochaTests/**/*.ts"
   },
   "dependencies": {
     "tslib": "1.7.1"
@@ -41,6 +41,7 @@
     "@types/chai": "^4.1.7",
     "@types/handlebars": "4.0.33",
     "@types/mocha": "^5.2.6",
+    "@types/node": "^11.11.5",
     "ajv": "6.6.1",
     "atob": "~2.1.1",
     "awesome-typescript-loader": "^3.2.3",
@@ -48,6 +49,8 @@
     "chai": "^4.2.0",
     "fork-ts-checker-webpack-plugin": "^0.5.1",
     "istanbul-instrumenter-loader": "^3.0.1",
+    "jsdom": "14.0.0",
+    "jsdom-global": "3.0.2",
     "jshint": "^2.9.7",
     "karma": "^2.0.4",
     "karma-chrome-launcher": "^2.0.0",
@@ -66,7 +69,6 @@
     "karma-verbose-reporter": "0.0.6",
     "karma-webpack": "^4.0.0-rc.5",
     "mocha": "^6.0.2",
-    "mocha-jsdom": "^2.0.0",
     "phantomjs-polyfill": "0.0.2",
     "shx": "^0.2.2",
     "sourcemap-istanbul-instrumenter-loader": "^0.2.0",

@@ -702,9 +702,7 @@ describe('Msal', function (): any {
         msal._loginInProgress = true;
 
         msal.loginRedirect();
-        console.log(err);
         expect(err).toEqual(jasmine.any(ClientAuthError));
-        console.log(err.stack);
         expect(token).toBe("");
         expect(tokenType).toBe("");
         // expect(state).toBe('1234');
