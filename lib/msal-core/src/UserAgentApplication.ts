@@ -445,6 +445,7 @@ export class UserAgentApplication {
    * @param extraQueryParameters
    */
   private loginRedirectHelper(scopes?: Array<string>, extraQueryParameters?: string) {
+    console.log("helper");
     // Track login in progress
     this._loginInProgress = true;
 
@@ -455,7 +456,7 @@ export class UserAgentApplication {
       if (extraQueryParameters) {
         authenticationRequest.extraQueryParameters = extraQueryParameters;
       }
-
+      console.log("helper1");
       // if the user sets the login start page - angular only??
       var loginStartPage = this._cacheStorage.getItem(Constants.angularLoginRequest);
       if (!loginStartPage || loginStartPage === "") {
@@ -463,7 +464,7 @@ export class UserAgentApplication {
       } else {
         this._cacheStorage.setItem(Constants.angularLoginRequest, "");
       }
-
+      console.log("helper2");
       // Cache the state, nonce, and login request data
       this._cacheStorage.setItem(Constants.loginRequest, loginStartPage, this.storeAuthStateInCookie);
       this._cacheStorage.setItem(Constants.loginError, "");
@@ -471,15 +472,16 @@ export class UserAgentApplication {
       this._cacheStorage.setItem(Constants.nonceIdToken, authenticationRequest.nonce, this.storeAuthStateInCookie);
       this._cacheStorage.setItem(Constants.msalError, "");
       this._cacheStorage.setItem(Constants.msalErrorDescription, "");
-
+      console.log("helper3");
       // Cache authorityKey
       const authorityKey = Storage.generateAuthorityKey(authenticationRequest.state);
       this._cacheStorage.setItem(authorityKey, this.authority, this.storeAuthStateInCookie);
 
       // build URL to navigate to proceed with the login
       const urlNavigate = authenticationRequest.createNavigateUrl(scopes)  + Constants.response_mode_fragment;
-
+      console.log("helper4");
       // Redirect user to login URL
+      console.log("URL: " + urlNavigate);
       this.promptUser(urlNavigate);
     });
   }

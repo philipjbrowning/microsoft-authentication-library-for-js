@@ -152,11 +152,14 @@ export abstract class Authority {
    */
   public ResolveEndpointsAsync(): Promise<Authority> {
     let openIdConfigurationEndpoint = "";
+    console.log("Resolve endpts");
     return this.GetOpenIdConfigurationEndpointAsync().then(openIdConfigurationEndpointResponse => {
       openIdConfigurationEndpoint = openIdConfigurationEndpointResponse;
+      console.log("openid endpt");
       return this.DiscoverEndpoints(openIdConfigurationEndpoint);
     }).then((tenantDiscoveryResponse: ITenantDiscoveryResponse) => {
       this.tenantDiscoveryResponse = tenantDiscoveryResponse;
+      console.log("discovered");
       return this;
     });
   }
