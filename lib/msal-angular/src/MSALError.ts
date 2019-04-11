@@ -1,41 +1,39 @@
 export class MSALError {
-    private _error: string="";
-    private _errorDesc: string="";
-    private _scopes: string="";
+  private _error: string = '';
+  private _errorDesc: string = '';
+  private _scopes: string = '';
 
-
-    constructor(error: string , errorDesc?: string, scopes?:string)
-    {
-        this._error = error;
-        if(errorDesc) {
-            this._errorDesc = errorDesc;
-        }
-        if(scopes) {
-            this._scopes = scopes;
-        }
+  constructor(error: string, errorDesc?: string, scopes?: string) {
+    this._error = error;
+    if (errorDesc) {
+      this._errorDesc = errorDesc;
     }
-
-    get error(): string {
-        return this._error;
+    if (scopes) {
+      this._scopes = scopes;
     }
+  }
 
-    set error(value: string) {
-        this._error = value;
-    }
+  get error(): string {
+    return this._error;
+  }
 
-    get errorDesc(): string {
-        return this._errorDesc;
-    }
+  set error(value: string) {
+    this._error = value;
+  }
 
-    set errorDesc(value: string) {
-        this._errorDesc = value;
-    }
+  get errorDesc(): string {
+    return this._errorDesc;
+  }
 
-    get scopes(): string {
-        return this._scopes;
-    }
+  set errorDesc(value: string) {
+    this._errorDesc = value;
+  }
 
-    set scopes(value: string) {
-        this._scopes = value;
-    }
+  get scopes(): string {
+    return this._scopes;
+  }
+
+  set scopes(value: string) {
+    this._scopes = value;
+  }
 }
