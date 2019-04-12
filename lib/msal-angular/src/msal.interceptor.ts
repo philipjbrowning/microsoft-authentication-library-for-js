@@ -26,18 +26,19 @@ export class MsalInterceptor implements HttpInterceptor {
           Authorization: `Bearer ${ tokenStored.token }`,
         },
       });
-      return next.handle(req).do(event => {
-      }, err => {
-        if (err instanceof HttpErrorResponse && err.status === 401) {
-          const scopes = this.auth.getScopesForEndpoint(req.url);
-          const tokenStored = this.auth.getCachedTokenInternal(scopes);
-          if (tokenStored && tokenStored.token) {
-            this.auth.clearCacheForScope(tokenStored.token);
+      return next.handle(req).pipe(
+        tap((err) => {
+          if (err instanceof HttpErrorResponse && err.status === 401) {
+            const scopes = this.auth.getScopesForEndpoint(req.url);
+            const tokenStored = this.auth.getCachedTokenInternal(scopes);
+            if (tokenStored && tokenStored.token) {
+              this.auth.clearCacheForScope(tokenStored.token);
+            }
+            const msalError = new MSALError(JSON.stringify(err), '', JSON.stringify(scopes));
+            this.broadcastService.broadcast('msal:notAuthorized', msalError);
           }
-          const msalError = new MSALError(JSON.stringify(err), '', JSON.stringify(scopes));
-          this.broadcastService.broadcast('msal:notAuthorized', msalError);
-        }
-      });
+        }),
+      );
     } else {
       return from(this.auth.acquireTokenSilent(scopes).then(token => {
         const JWT = `Bearer ${ token }`;
@@ -48,8 +49,7 @@ export class MsalInterceptor implements HttpInterceptor {
         });
       })).pipe(
         mergeMap(req => next.handle(req).pipe(
-          tap(event => {
-          }, err => {
+          tap(err => {
             if (err instanceof HttpErrorResponse && err.status === 401) {
               const scopes = this.auth.getScopesForEndpoint(req.url);
               const tokenStored = this.auth.getCachedTokenInternal(scopes);
