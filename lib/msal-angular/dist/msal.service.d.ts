@@ -1,16 +1,14 @@
-import { InjectionToken } from "@angular/core";
-import { MsalConfig } from "./msal-config";
-import "rxjs/add/observable/of";
-import "rxjs/add/operator/do";
-import "rxjs/add/operator/delay";
-import { UserAgentApplication, CacheResult, User, Logger } from "msal";
-import { Router } from "@angular/router";
-import { BroadcastService } from "./broadcast.service";
+import { InjectionToken } from '@angular/core';
+import { Router } from '@angular/router';
+import { CacheResult, Logger, User, UserAgentApplication } from 'msal';
+import { BroadcastService } from './broadcast.service';
+import { MsalConfig } from './msal-config';
 export declare const MSAL_CONFIG: InjectionToken<string>;
 export declare class MsalService extends UserAgentApplication {
     private config;
     private router;
     private broadcastService;
+    readonly loginScopes: string[];
     user: any;
     _oauthData: {
         isAuthenticated: boolean;
@@ -18,7 +16,6 @@ export declare class MsalService extends UserAgentApplication {
         loginError: string;
         idToken: {};
     };
-    private loginScopes;
     _renewActive: boolean;
     constructor(config: MsalConfig, router: Router, broadcastService: BroadcastService);
     updateDataFromCache(scopes: string[]): void;
