@@ -1,10 +1,8 @@
-import { ActivatedRoute, ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot } from "@angular/router";
-import { MsalService } from "./msal.service";
-import 'rxjs/add/operator/filter';
-import 'rxjs/add/operator/pairwise';
-import { Location, PlatformLocation } from "@angular/common";
-import { MsalConfig } from "./msal-config";
-import { BroadcastService } from "./broadcast.service";
+import { Location, PlatformLocation } from '@angular/common';
+import { ActivatedRoute, ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot } from '@angular/router';
+import { BroadcastService } from './broadcast.service';
+import { MsalConfig } from './msal-config';
+import { MsalService } from './msal.service';
 export declare class MsalGuard implements CanActivate {
     private config;
     private authService;

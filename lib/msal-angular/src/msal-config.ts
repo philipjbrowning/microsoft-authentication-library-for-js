@@ -1,20 +1,20 @@
-import {LogLevel} from "msal";
-import {ILoggerCallback} from "msal/lib-commonjs/Logger";
+import {LogLevel} from 'msal';
+import {ILoggerCallback} from 'msal/lib-commonjs/Logger';
 
 export class MsalConfig {
     clientID: string;
-    authority ?= "https://login.microsoftonline.com/common";
+    authority ?= 'https://login.microsoftonline.com/common';
     tokenReceivedCallback?: boolean;
-    validateAuthority ? = true;
-    cacheLocation? = "sessionStorage";
+    validateAuthority ?= true;
+    cacheLocation ?= 'sessionStorage';
     redirectUri?: string;
     postLogoutRedirectUri?: string;
     logger?: ILoggerCallback;
-    loadFrameTimeout? = 6000;
-    navigateToLoginRequestUrl?= true ;
+    loadFrameTimeout ? = 6000;
+    navigateToLoginRequestUrl ?= true ;
     popUp?: boolean;
     consentScopes?: string[];
-    isAngular?:true;
+    isAngular?: true;
     unprotectedResources? :  string[];
     protectedResourceMap?: [string, string[]][];
     extraQueryParameters?: string;

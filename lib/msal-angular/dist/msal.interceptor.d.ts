@@ -1,9 +1,7 @@
-import { HttpRequest, HttpHandler, HttpEvent, HttpInterceptor } from '@angular/common/http';
-import { Observable } from 'rxjs/Observable';
-import 'rxjs/add/observable/fromPromise';
-import 'rxjs/add/operator/mergeMap';
-import { MsalService } from "./msal.service";
-import { BroadcastService } from "./broadcast.service";
+import { HttpEvent, HttpHandler, HttpInterceptor, HttpRequest } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { BroadcastService } from './broadcast.service';
+import { MsalService } from './msal.service';
 export declare class MsalInterceptor implements HttpInterceptor {
     private auth;
     private broadcastService;

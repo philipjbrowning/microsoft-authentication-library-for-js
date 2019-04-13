@@ -1,12 +1,8 @@
-import { Subscription } from 'rxjs/Subscription';
-import 'rxjs/add/operator/filter';
-import 'rxjs/add/operator/map';
-import { BehaviorSubject } from "rxjs/BehaviorSubject";
-import { Observable } from "rxjs/Observable";
+import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 export declare type MessageCallback = (payload: any) => void;
 export declare class BroadcastService {
-    private _msalSubject;
-    private msalItem$;
+    readonly _msalSubject: BehaviorSubject<any>;
+    readonly msalItem$: Observable<any>;
     constructor();
     broadcast(type: string, payload: any): void;
     getMSALSubject(): BehaviorSubject<any>;
